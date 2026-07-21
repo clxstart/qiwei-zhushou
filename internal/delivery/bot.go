@@ -39,24 +39,29 @@ func (stdRandom) Intn(n int) int { return rand.Intn(n) }
 
 // Bot 交付助手业务门面（主 seam）。
 type Bot struct {
-	gw     wecom.Gateway
-	groups GroupStore
-	techs  *tech.Service
-	gcfg   *globalcfg.Service
-	clock  Clock
-	rand   Random
-	logger *log.Logger
+	gw      wecom.Gateway
+	groups  GroupStore
+	ledgers LedgerStore
+	techs   *tech.Service
+	gcfg    *globalcfg.Service
+	clock   Clock
+	rand    Random
+	logger  *log.Logger
 }
 
-func NewBot(gw wecom.Gateway, groups GroupStore, techs *tech.Service, gcfg *globalcfg.Service) *Bot {
+func NewBot(gw wecom.Gateway, groups GroupStore, ledgers LedgerStore, techs *tech.Service, gcfg *globalcfg.Service) *Bot {
+	if ledgers == nil {
+		ledgers = NewMemoryLedgerStore()
+	}
 	return &Bot{
-		gw:     gw,
-		groups: groups,
-		techs:  techs,
-		gcfg:   gcfg,
-		clock:  realClock{},
-		rand:   stdRandom{},
-		logger: log.Default(),
+		gw:      gw,
+		groups:  groups,
+		ledgers: ledgers,
+		techs:   techs,
+		gcfg:    gcfg,
+		clock:   realClock{},
+		rand:    stdRandom{},
+		logger:  log.Default(),
 	}
 }
 
@@ -451,8 +456,8 @@ func (b *Bot) techIntroExtra(ctx context.Context, userid string) string {
 
 func buildAccountCardText(g *GroupChat) string {
 	return fmt.Sprintf(
-		"【本群账务】\n群：%s\n状态：待录入金额\n\n拉群人可操作：\n1）录入定金与总价\n2）发送尾款收款码\n3）确认结清\n\n（卡片/H5 入口后续启用；请拉群人使用管理链接完成操作）",
-		g.Name,
+		"【本群账务】\n群：%s\n状态：待录入金额\n\n拉群人可操作：\n1）录入定金与总价\n2）发送尾款收款码\n3）确认结清\n\n录入入口：/h5/payment?chat_id=%s\n（需企微身份；仅拉群人有效）",
+		g.Name, g.ChatID,
 	)
 }
 

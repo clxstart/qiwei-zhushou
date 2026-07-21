@@ -77,7 +77,7 @@ func (c *Container) Initialize(cfgPath string) error {
 	}
 	c.WeComGateway = gw
 
-	c.Delivery = delivery.NewBot(gw, store.NewGroupStore(db), c.Techs, c.GCfg)
+	c.Delivery = delivery.NewBot(gw, store.NewGroupStore(db), store.NewLedgerStore(db), c.Techs, c.GCfg)
 
 	cb, err := buildWeComCallback(cfg, c.Delivery)
 	if err != nil {

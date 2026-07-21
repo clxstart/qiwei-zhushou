@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>录入金额</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --card: #fff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --accent: #0f766e;
+      --danger: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .card {
+      max-width: 420px;
+      margin: 24px auto;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    h1 { margin: 0 0 6px; font-size: 1.15rem; }
+    .sub { color: var(--muted); font-size: .9rem; margin: 0 0 16px; }
+    label { display: block; font-size: .85rem; color: var(--muted); margin: 0 0 6px; }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      margin-bottom: 12px;
+      font-size: 1rem;
+    }
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 6px;
+      padding: 11px 12px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 1rem;
+    }
+    .err { color: var(--danger); min-height: 1.2em; font-size: .9rem; }
+    .ok { color: var(--accent); font-size: .95rem; }
+    .meta { background: #f9fafb; border-radius: 6px; padding: 10px 12px; margin-bottom: 14px; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>录入定金与总价</h1>
+    <p class="sub">仅拉群人可提交；可反复覆盖。入账成功不会在群里通知。</p>
+    <div class="meta" id="meta">加载中…</div>
+    <p class="err" id="err"></p>
+    <p class="ok" id="ok"></p>
+    <form id="form">
+      <label for="userid">企微 UserID（免登联调前手动填）</label>
+      <input id="userid" required autocomplete="username" />
+      <label for="deposit">定金（元）</label>
+      <input id="deposit" type="number" min="0" step="1" required />
+      <label for="total">总价（元）</label>
+      <input id="total" type="number" min="1" step="1" required />
+      <button type="submit">提交入账</button>
+    </form>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const chatId = params.get('chat_id') || '';
+    const useridInput = document.getElementById('userid');
+    if (params.get('userid')) useridInput.value = params.get('userid');
+
+    const meta = document.getElementById('meta');
+    const errEl = document.getElementById('err');
+    const okEl = document.getElementById('ok');
+
+    if (!chatId) {
+      meta.textContent = '缺少 chat_id 参数';
+    } else {
+      meta.textContent = '群 ID：' + chatId;
+    }
+
+    async function loadLedger() {
+      if (!chatId || !useridInput.value) return;
+      try {
+        const res = await fetch('/api/v1/staff/groups/' + encodeURIComponent(chatId) + '/ledger', {
+          headers: { 'X-WeCom-UserID': useridInput.value },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        meta.innerHTML = '群 ID：' + chatId +
+          '<br>状态：' + (data.status || '-') +
+          '<br>定金：' + (data.deposit || 0) +
+          ' / 总价：' + (data.total || 0) +
+          ' / 尾款：' + (data.tail || 0);
+        if (data.total > 0) {
+          document.getElementById('deposit').value = data.deposit;
+          document.getElementById('total').value = data.total;
+        }
+      } catch (e) {
+        // 未入账或非拉群人时忽略展示
+      }
+    }
+
+    useridInput.addEventListener('change', loadLedger);
+    loadLedger();
+
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errEl.textContent = '';
+      okEl.textContent = '';
+      if (!chatId) {
+        errEl.textContent = '缺少 chat_id';
+        return;
+      }
+      const deposit = Number(document.getElementById('deposit').value);
+      const total = Number(document.getElementById('total').value);
+      try {
+        const res = await fetch('/api/v1/staff/groups/' + encodeURIComponent(chatId) + '/payment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-WeCom-UserID': useridInput.value.trim(),
+          },
+          body: JSON.stringify({ deposit, total }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        okEl.textContent = '已入账：定金 ' + data.deposit + '，总价 ' + data.total + '，尾款 ' + data.tail;
+        meta.innerHTML = '群 ID：' + chatId +
+          '<br>状态：' + data.status +
+          '<br>定金：' + data.deposit +
+          ' / 总价：' + data.total +
+          ' / 尾款：' + data.tail;
+      } catch (err) {
+        errEl.textContent = err.message || '提交失败';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -56,6 +56,10 @@ go run ./cmd/server -config configs/app.toml
 | GET | `/api/v1/admin/global-config/placeholders` | 模板占位列表 |
 | GET/POST | `/wecom/callback` | 企微回调（URL 验证 + 加密事件解密；建群触发 DeliveryBot） |
 | GET | `/api/v1/admin/groups/{chat_id}` | 查看群流水线/成员/选定技术 |
+| GET/POST | `/api/v1/admin/groups/{chat_id}/ledger` `/payment` | 管理员查看/代录入金额 |
+| GET/POST | `/api/v1/staff/groups/{chat_id}/ledger` `/payment` | 拉群人账务（Header `X-WeCom-UserID`） |
+| — | `/h5/payment?chat_id=` | 录入金额 H5 壳 |
+
 
 模板占位：`{tech_name}` `{boss_list}` `{amount}` `{tail}` `{group_name}` `{emergency}`
 

@@ -35,8 +35,9 @@ func setupBot(t *testing.T) (*Bot, *wecom.FakeGateway, *tech.Service, *globalcfg
 	gcfgStore := globalcfg.NewMemoryStore()
 	gcfgSvc := globalcfg.NewService(gcfgStore, globalcfg.NewMemoryAssetStore())
 	groups := NewMemoryGroupStore()
+	ledgers := NewMemoryLedgerStore()
 	now := time.Date(2026, 7, 21, 10, 0, 0, 0, time.FixedZone("CST", 8*3600))
-	bot := NewBot(gw, groups, techSvc, gcfgSvc).
+	bot := NewBot(gw, groups, ledgers, techSvc, gcfgSvc).
 		WithClock(fixedClock{t: now}).
 		WithRandom(fixedRand{n: 1}) // 多名时取 index 1
 	return bot, gw, techSvc, gcfgSvc

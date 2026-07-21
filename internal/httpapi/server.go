@@ -81,9 +81,10 @@ func (s *Server) routes() {
 	s.registerTechRoutes()
 	s.registerGlobalConfigRoutes()
 	s.registerDeliveryRoutes()
+	s.registerPaymentRoutes()
 	s.registerWeComRoutes()
 
-	// 静态资源（管理壳）
+	// 静态资源（管理壳 + H5）
 	s.mux.Handle("/", s.staticHandler())
 }
 

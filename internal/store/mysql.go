@@ -105,6 +105,17 @@ func (d *DB) Migrate(ctx context.Context) error {
 			updated_at BIGINT NOT NULL,
 			INDEX idx_group_chats_updated (updated_at)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`CREATE TABLE IF NOT EXISTS group_ledgers (
+			chat_id VARCHAR(64) PRIMARY KEY,
+			deposit BIGINT NOT NULL DEFAULT 0,
+			total BIGINT NOT NULL DEFAULT 0,
+			tail BIGINT NOT NULL DEFAULT 0,
+			code_sent_count INT NOT NULL DEFAULT 0,
+			status VARCHAR(32) NOT NULL DEFAULT 'unbooked',
+			created_at BIGINT NOT NULL,
+			updated_at BIGINT NOT NULL,
+			INDEX idx_group_ledgers_status (status)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 	}
 	for _, stmt := range stmts {
 		if _, err := d.SQL.ExecContext(ctx, stmt); err != nil {
