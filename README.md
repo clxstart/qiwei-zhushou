@@ -58,6 +58,8 @@ go run ./cmd/server -config configs/app.toml
 | GET | `/api/v1/admin/groups/{chat_id}` | 查看群流水线/成员/选定技术 |
 | GET/POST | `/api/v1/admin/groups/{chat_id}/ledger` `/payment` | 管理员查看/代录入金额 |
 | GET/POST | `/api/v1/staff/groups/{chat_id}/ledger` `/payment` | 拉群人账务（Header `X-WeCom-UserID`） |
+| POST | `/api/v1/staff/groups/{chat_id}/send-code` | 拉群人发尾款码到群 |
+| POST | `/api/v1/admin/groups/{chat_id}/send-code` | 管理员代发尾款码 |
 | — | `/h5/payment?chat_id=` | 录入金额 H5 壳 |
 
 

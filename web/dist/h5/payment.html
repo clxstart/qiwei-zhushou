@@ -71,6 +71,7 @@
       <label for="total">总价（元）</label>
       <input id="total" type="number" min="1" step="1" required />
       <button type="submit">提交入账</button>
+      <button type="button" id="send-code" style="margin-top:10px;background:#0d9488">发尾款码到群</button>
     </form>
   </div>
   <script>
@@ -114,6 +115,15 @@
     useridInput.addEventListener('change', loadLedger);
     loadLedger();
 
+    function showLedger(data) {
+      meta.innerHTML = '群 ID：' + chatId +
+        '<br>状态：' + data.status +
+        '<br>定金：' + data.deposit +
+        ' / 总价：' + data.total +
+        ' / 尾款：' + data.tail +
+        '<br>发码次数：' + (data.code_sent_count || 0);
+    }
+
     document.getElementById('form').addEventListener('submit', async (e) => {
       e.preventDefault();
       errEl.textContent = '';
@@ -136,13 +146,30 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || res.statusText);
         okEl.textContent = '已入账：定金 ' + data.deposit + '，总价 ' + data.total + '，尾款 ' + data.tail;
-        meta.innerHTML = '群 ID：' + chatId +
-          '<br>状态：' + data.status +
-          '<br>定金：' + data.deposit +
-          ' / 总价：' + data.total +
-          ' / 尾款：' + data.tail;
+        showLedger(data);
       } catch (err) {
         errEl.textContent = err.message || '提交失败';
+      }
+    });
+
+    document.getElementById('send-code').addEventListener('click', async () => {
+      errEl.textContent = '';
+      okEl.textContent = '';
+      if (!chatId) {
+        errEl.textContent = '缺少 chat_id';
+        return;
+      }
+      try {
+        const res = await fetch('/api/v1/staff/groups/' + encodeURIComponent(chatId) + '/send-code', {
+          method: 'POST',
+          headers: { 'X-WeCom-UserID': useridInput.value.trim() },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        okEl.textContent = '已发尾款码到群（第 ' + data.code_sent_count + ' 次）';
+        showLedger(data);
+      } catch (err) {
+        errEl.textContent = err.message || '发码失败';
       }
     });
   </script>

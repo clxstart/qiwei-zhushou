@@ -13,10 +13,12 @@ func (s *Server) registerPaymentRoutes() {
 	// 拉群人（企微身份）：Header X-WeCom-UserID 或 query userid（H5 开发期）
 	s.mux.HandleFunc("GET /api/v1/staff/groups/{chat_id}/ledger", s.handleStaffGetLedger)
 	s.mux.HandleFunc("POST /api/v1/staff/groups/{chat_id}/payment", s.handleStaffRecordPayment)
+	s.mux.HandleFunc("POST /api/v1/staff/groups/{chat_id}/send-code", s.handleStaffSendCode)
 
-	// 管理员代录入
+	// 管理员代录入 / 代发码
 	s.mux.HandleFunc("POST /api/v1/admin/groups/{chat_id}/payment", s.requireAdmin(s.handleAdminRecordPayment))
 	s.mux.HandleFunc("GET /api/v1/admin/groups/{chat_id}/ledger", s.requireAdmin(s.handleAdminGetLedger))
+	s.mux.HandleFunc("POST /api/v1/admin/groups/{chat_id}/send-code", s.requireAdmin(s.handleAdminSendCode))
 }
 
 type paymentBody struct {
@@ -121,6 +123,39 @@ func (s *Server) handleAdminGetLedger(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, led)
 }
 
+func (s *Server) handleStaffSendCode(w http.ResponseWriter, r *http.Request) {
+	if s.delivery == nil {
+		writeErr(w, http.StatusInternalServerError, "delivery bot unavailable")
+		return
+	}
+	actor, ok := s.staffActor(r)
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "missing wecom userid")
+		return
+	}
+	chatID := r.PathValue("chat_id")
+	led, err := s.delivery.SendTailPaymentCode(r.Context(), chatID, actor)
+	if err != nil {
+		writePaymentErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, led)
+}
+
+func (s *Server) handleAdminSendCode(w http.ResponseWriter, r *http.Request) {
+	if s.delivery == nil {
+		writeErr(w, http.StatusInternalServerError, "delivery bot unavailable")
+		return
+	}
+	chatID := r.PathValue("chat_id")
+	led, err := s.delivery.SendTailPaymentCode(r.Context(), chatID, delivery.Actor{IsAdmin: true, UserID: "admin"})
+	if err != nil {
+		writePaymentErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, led)
+}
+
 func writePaymentErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, delivery.ErrForbidden):
@@ -129,6 +164,10 @@ func writePaymentErr(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, delivery.ErrLedgerSettled):
 		writeErr(w, http.StatusConflict, "ledger already settled")
+	case errors.Is(err, delivery.ErrNotBooked):
+		writeErr(w, http.StatusBadRequest, "record payment before sending code")
+	case errors.Is(err, delivery.ErrNoPaymentQR):
+		writeErr(w, http.StatusBadRequest, "payment qr not configured")
 	case errors.Is(err, delivery.ErrGroupNotFound):
 		writeErr(w, http.StatusNotFound, "group not found")
 	case errors.Is(err, delivery.ErrLedgerNotFound):

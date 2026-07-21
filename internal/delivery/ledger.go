@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+
+	"github.com/clxstart/qiwei-zhushou/internal/globalcfg"
 )
 
 // 账务状态。
@@ -16,10 +19,12 @@ const (
 )
 
 var (
-	ErrForbidden       = errors.New("forbidden: only group creator may operate")
-	ErrInvalidAmount   = errors.New("invalid amount")
-	ErrLedgerSettled   = errors.New("ledger already settled")
-	ErrLedgerNotFound  = errors.New("ledger not found")
+	ErrForbidden      = errors.New("forbidden: only group creator may operate")
+	ErrInvalidAmount  = errors.New("invalid amount")
+	ErrLedgerSettled  = errors.New("ledger already settled")
+	ErrLedgerNotFound = errors.New("ledger not found")
+	ErrNotBooked      = errors.New("ledger not booked: record payment first")
+	ErrNoPaymentQR    = errors.New("payment qr not configured")
 )
 
 // Ledger 一群一账。
@@ -151,4 +156,89 @@ func validateAmounts(deposit, total int64) error {
 		return fmt.Errorf("%w: deposit must be <= total", ErrInvalidAmount)
 	}
 	return nil
+}
+
+// SendTailPaymentCode 向客户群发送尾款文字 + 全局收款码图片。
+// 未结清可多次；每次 code_sent_count++ 并进入/保持 code_sent。
+func (b *Bot) SendTailPaymentCode(ctx context.Context, chatID string, actor Actor) (*Ledger, error) {
+	g, err := b.groups.GetByChatID(ctx, chatID)
+	if err != nil {
+		return nil, err
+	}
+	if !actor.IsAdmin && actor.UserID != g.CreatorUserID {
+		return nil, ErrForbidden
+	}
+
+	led, err := b.ledgers.Get(ctx, chatID)
+	if err != nil {
+		if errors.Is(err, ErrLedgerNotFound) {
+			return nil, ErrNotBooked
+		}
+		return nil, err
+	}
+	if led.Status == LedgerSettled {
+		return nil, ErrLedgerSettled
+	}
+	if led.Status == LedgerUnbooked || led.Total <= 0 {
+		return nil, ErrNotBooked
+	}
+
+	cfg, err := b.gcfg.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	qrData, _, err := b.gcfg.ReadPaymentQR(ctx)
+	if err != nil {
+		if errors.Is(err, globalcfg.ErrNotFound) {
+			return nil, ErrNoPaymentQR
+		}
+		return nil, err
+	}
+	if len(qrData) == 0 {
+		return nil, ErrNoPaymentQR
+	}
+
+	text := strings.TrimSpace(cfg.TplPaymentCode)
+	if text == "" {
+		text = "【尾款支付】\n应付尾款：{tail} 元\n请付款后将截图发至本群。"
+	}
+	text = Render(text, map[string]string{
+		"{tail}":       fmt.Sprintf("%d", led.Tail),
+		"{amount}":     fmt.Sprintf("%d", led.Total),
+		"{tech_name}":  g.SelectedTechName,
+		"{group_name}": g.Name,
+		"{boss_list}":  "",
+		"{emergency}":  cfg.EmergencyContact,
+	})
+
+	if err := b.gw.SendText(ctx, chatID, text, nil); err != nil {
+		return nil, fmt.Errorf("send tail text: %w", err)
+	}
+
+	mediaID, err := b.gw.UploadImage(ctx, "payment-qr.png", qrData)
+	if err != nil {
+		return nil, fmt.Errorf("upload payment qr: %w", err)
+	}
+	if err := b.gw.SendImage(ctx, chatID, mediaID); err != nil {
+		return nil, fmt.Errorf("send payment qr: %w", err)
+	}
+
+	led.CodeSentCount++
+	led.Status = LedgerCodeSent
+	led.UpdatedAt = b.clock.Now()
+	if err := b.ledgers.Save(ctx, led); err != nil {
+		return nil, err
+	}
+	return led, nil
+}
+
+// MarkSettledForTest 测试桩：将账本置为已结清（票 08 前用于断言发码拒绝）。
+func (b *Bot) MarkSettledForTest(ctx context.Context, chatID string) error {
+	led, err := b.ledgers.Get(ctx, chatID)
+	if err != nil {
+		return err
+	}
+	led.Status = LedgerSettled
+	led.UpdatedAt = b.clock.Now()
+	return b.ledgers.Save(ctx, led)
 }

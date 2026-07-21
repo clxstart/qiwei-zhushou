@@ -100,4 +100,29 @@ func TestStaffPayment_HTTP(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("get: %d", rr.Code)
 	}
+
+	// send code without qr -> bad request
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/staff/groups/chat1/send-code", nil)
+	req.Header.Set("X-WeCom-UserID", "creator1")
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("send without qr: %d %s", rr.Code, rr.Body.String())
+	}
+
+	// upload qr then send
+	if _, err := gcfgSvc.SavePaymentQR(reqCtx, "q.png", []byte{0x89, 0x50, 0x4E, 0x47, 1}); err != nil {
+		t.Fatal(err)
+	}
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/staff/groups/chat1/send-code", nil)
+	req.Header.Set("X-WeCom-UserID", "creator1")
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("send code: %d %s", rr.Code, rr.Body.String())
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &led)
+	if led.CodeSentCount != 1 || led.Status != delivery.LedgerCodeSent {
+		t.Fatalf("after send %+v", led)
+	}
 }

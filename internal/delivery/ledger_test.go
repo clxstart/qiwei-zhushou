@@ -83,3 +83,83 @@ func TestGetLedger_Empty(t *testing.T) {
 		t.Fatalf("%+v", led)
 	}
 }
+
+func TestSendTailPaymentCode(t *testing.T) {
+	bot, gw, _, gcfgSvc := setupBot(t)
+	ctx := context.Background()
+	seedGroup(t, bot, gw, "c3", "creator1")
+
+	// 未入账
+	_, err := bot.SendTailPaymentCode(ctx, "c3", Actor{UserID: "creator1"})
+	if !errors.Is(err, ErrNotBooked) {
+		t.Fatalf("want not booked, got %v", err)
+	}
+
+	_, err = bot.RecordPayment(ctx, "c3", Actor{UserID: "creator1"}, 3000, 8000)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 无收款码
+	_, err = bot.SendTailPaymentCode(ctx, "c3", Actor{UserID: "creator1"})
+	if !errors.Is(err, ErrNoPaymentQR) {
+		t.Fatalf("want no qr, got %v", err)
+	}
+
+	_, err = gcfgSvc.SavePaymentQR(ctx, "code.png", []byte{0x89, 0x50, 0x4E, 0x47, 1, 2, 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 非拉群人
+	_, err = bot.SendTailPaymentCode(ctx, "c3", Actor{UserID: "other"})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("want forbidden, got %v", err)
+	}
+
+	// 发两次
+	led1, err := bot.SendTailPaymentCode(ctx, "c3", Actor{UserID: "creator1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if led1.CodeSentCount != 1 || led1.Status != LedgerCodeSent {
+		t.Fatalf("first=%+v", led1)
+	}
+	led2, err := bot.SendTailPaymentCode(ctx, "c3", Actor{UserID: "creator1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if led2.CodeSentCount != 2 {
+		t.Fatalf("second count=%d", led2.CodeSentCount)
+	}
+
+	// 群内文字 + 图
+	sends := filterMethod(gw.Snapshot(), "SendText")
+	images := filterMethod(gw.Snapshot(), "SendImage")
+	uploads := filterMethod(gw.Snapshot(), "UploadImage")
+	if len(sends) < 2 || len(images) < 2 || len(uploads) < 2 {
+		t.Fatalf("send=%d image=%d upload=%d", len(sends), len(images), len(uploads))
+	}
+	if !contains(sends[len(sends)-1].Summary, "5000") && !contains(sends[0].Summary, "5000") {
+		// 尾款 8000-3000=5000 应出现在文案
+		found := false
+		for _, c := range sends {
+			if contains(c.Summary, "5000") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("tail text missing 5000: %+v", sends)
+		}
+	}
+
+	// 结清后拒绝
+	if err := bot.MarkSettledForTest(ctx, "c3"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = bot.SendTailPaymentCode(ctx, "c3", Actor{UserID: "creator1"})
+	if !errors.Is(err, ErrLedgerSettled) {
+		t.Fatalf("want settled, got %v", err)
+	}
+}
