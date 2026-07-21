@@ -155,6 +155,7 @@
       <div class="nav">
         <button type="button" class="secondary small active" data-page="home">首页</button>
         <button type="button" class="secondary small" data-page="techs">技术花名册</button>
+        <button type="button" class="secondary small" data-page="gcfg">全局配置</button>
       </div>
       <div class="row">
         <span id="who" class="sub" style="margin:0"></span>
@@ -165,8 +166,69 @@
     <div class="panel">
       <section id="page-home" class="card">
         <h2>首页</h2>
-        <p class="ok">已登录。票 01 骨架 + 票 02 花名册可用。</p>
+        <p class="ok">已登录。票 01–03：骨架、花名册、全局配置可用。</p>
         <p class="sub">健康检查：<code id="health">…</code></p>
+      </section>
+
+      <section id="page-gcfg" class="hidden">
+        <div class="card" style="margin-bottom:14px">
+          <h2>全局配置</h2>
+          <p class="sub">占位变量：<code id="gcfg-placeholders">…</code></p>
+          <p id="gcfg-err" class="err"></p>
+          <p id="gcfg-ok" class="ok"></p>
+          <form id="gcfg-form">
+            <label for="gcfg-trigger">触发范围</label>
+            <select id="gcfg-trigger">
+              <option value="external_only">仅外部客户群（默认）</option>
+              <option value="all">全部群（自测）</option>
+            </select>
+            <div class="grid2">
+              <div>
+                <label for="gcfg-suffix">群名固定后缀</label>
+                <input id="gcfg-suffix" placeholder="｜交付" />
+              </div>
+              <div>
+                <label for="gcfg-emg-userid">紧急联系人企微 UserID</label>
+                <input id="gcfg-emg-userid" placeholder="可选，在群可 @" />
+              </div>
+            </div>
+            <label for="gcfg-emg">紧急联系人展示</label>
+            <input id="gcfg-emg" placeholder="姓名 + 联系方式" />
+            <label for="gcfg-notice">交付注意事项</label>
+            <textarea id="gcfg-notice"></textarea>
+            <label for="gcfg-flow">业务-流程</label>
+            <textarea id="gcfg-flow"></textarea>
+            <label for="gcfg-feature">业务-特色</label>
+            <textarea id="gcfg-feature"></textarea>
+            <label for="gcfg-extend">业务-扩展</label>
+            <textarea id="gcfg-extend"></textarea>
+            <label for="gcfg-tpl-role">模板-角色说明</label>
+            <textarea id="gcfg-tpl-role"></textarea>
+            <label for="gcfg-tpl-tech">模板-技术介绍</label>
+            <textarea id="gcfg-tpl-tech"></textarea>
+            <label for="gcfg-tpl-pay">模板-发尾款码</label>
+            <textarea id="gcfg-tpl-pay"></textarea>
+            <label for="gcfg-tpl-settle">模板-结清通知</label>
+            <textarea id="gcfg-tpl-settle"></textarea>
+            <div class="form-actions">
+              <button type="submit">保存配置</button>
+              <button type="button" class="secondary" id="gcfg-reload">重新加载</button>
+            </div>
+          </form>
+        </div>
+        <div class="card">
+          <h2>全局支付宝收款码</h2>
+          <p class="sub">上传后供发尾款码使用；可随时更换。</p>
+          <p id="gcfg-qr-err" class="err"></p>
+          <div class="row" style="margin-bottom:12px">
+            <input id="gcfg-qr-file" type="file" accept="image/*" style="margin:0;max-width:280px" />
+            <button type="button" id="gcfg-qr-upload">上传/更换</button>
+          </div>
+          <div id="gcfg-qr-preview-wrap" class="hidden">
+            <img id="gcfg-qr-preview" alt="payment qr" style="max-width:240px;border:1px solid var(--line);border-radius:6px" />
+          </div>
+          <p id="gcfg-qr-empty" class="sub">尚未上传收款码</p>
+        </div>
       </section>
 
       <section id="page-techs" class="hidden">
@@ -266,10 +328,12 @@
     function showPage(name) {
       document.getElementById('page-home').classList.toggle('hidden', name !== 'home');
       document.getElementById('page-techs').classList.toggle('hidden', name !== 'techs');
+      document.getElementById('page-gcfg').classList.toggle('hidden', name !== 'gcfg');
       document.querySelectorAll('.nav [data-page]').forEach((btn) => {
         btn.classList.toggle('active', btn.dataset.page === name);
       });
       if (name === 'techs') loadTechs();
+      if (name === 'gcfg') loadGlobalConfig();
     }
 
     document.querySelectorAll('.nav [data-page]').forEach((btn) => {
@@ -428,6 +492,101 @@
 
     document.getElementById('tech-reset').addEventListener('click', resetTechForm);
     document.getElementById('tech-refresh').addEventListener('click', loadTechs);
+
+    function fillGlobalConfig(cfg) {
+      document.getElementById('gcfg-trigger').value = cfg.trigger_scope || 'external_only';
+      document.getElementById('gcfg-suffix').value = cfg.group_name_suffix || '';
+      document.getElementById('gcfg-emg').value = cfg.emergency_contact || '';
+      document.getElementById('gcfg-emg-userid').value = cfg.emergency_userid || '';
+      document.getElementById('gcfg-notice').value = cfg.delivery_notice || '';
+      document.getElementById('gcfg-flow').value = cfg.biz_flow_text || '';
+      document.getElementById('gcfg-feature').value = cfg.biz_feature_text || '';
+      document.getElementById('gcfg-extend').value = cfg.biz_extend_text || '';
+      document.getElementById('gcfg-tpl-role').value = cfg.tpl_role_announcement || '';
+      document.getElementById('gcfg-tpl-tech').value = cfg.tpl_tech_intro || '';
+      document.getElementById('gcfg-tpl-pay').value = cfg.tpl_payment_code || '';
+      document.getElementById('gcfg-tpl-settle').value = cfg.tpl_settle_notice || '';
+      const hasQR = !!cfg.payment_qr_path;
+      document.getElementById('gcfg-qr-preview-wrap').classList.toggle('hidden', !hasQR);
+      document.getElementById('gcfg-qr-empty').classList.toggle('hidden', hasQR);
+      if (hasQR) {
+        document.getElementById('gcfg-qr-preview').src =
+          '/api/v1/admin/global-config/payment-qr?t=' + Date.now();
+      }
+    }
+
+    async function loadGlobalConfig() {
+      document.getElementById('gcfg-err').textContent = '';
+      document.getElementById('gcfg-ok').textContent = '';
+      try {
+        const [cfg, ph] = await Promise.all([
+          api('/api/v1/admin/global-config'),
+          api('/api/v1/admin/global-config/placeholders'),
+        ]);
+        document.getElementById('gcfg-placeholders').textContent =
+          (ph.placeholders || []).join(' ');
+        fillGlobalConfig(cfg);
+      } catch (err) {
+        document.getElementById('gcfg-err').textContent = err.message || '加载失败';
+      }
+    }
+
+    document.getElementById('gcfg-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      document.getElementById('gcfg-err').textContent = '';
+      document.getElementById('gcfg-ok').textContent = '';
+      const body = {
+        delivery_notice: document.getElementById('gcfg-notice').value,
+        biz_flow_text: document.getElementById('gcfg-flow').value,
+        biz_feature_text: document.getElementById('gcfg-feature').value,
+        biz_extend_text: document.getElementById('gcfg-extend').value,
+        group_name_suffix: document.getElementById('gcfg-suffix').value,
+        emergency_contact: document.getElementById('gcfg-emg').value,
+        emergency_userid: document.getElementById('gcfg-emg-userid').value,
+        trigger_scope: document.getElementById('gcfg-trigger').value,
+        tpl_role_announcement: document.getElementById('gcfg-tpl-role').value,
+        tpl_tech_intro: document.getElementById('gcfg-tpl-tech').value,
+        tpl_payment_code: document.getElementById('gcfg-tpl-pay').value,
+        tpl_settle_notice: document.getElementById('gcfg-tpl-settle').value,
+      };
+      try {
+        const cfg = await api('/api/v1/admin/global-config', {
+          method: 'PUT',
+          body: JSON.stringify(body),
+        });
+        fillGlobalConfig(cfg);
+        document.getElementById('gcfg-ok').textContent = '已保存';
+      } catch (err) {
+        document.getElementById('gcfg-err').textContent = err.message || '保存失败';
+      }
+    });
+
+    document.getElementById('gcfg-reload').addEventListener('click', loadGlobalConfig);
+
+    document.getElementById('gcfg-qr-upload').addEventListener('click', async () => {
+      document.getElementById('gcfg-qr-err').textContent = '';
+      const input = document.getElementById('gcfg-qr-file');
+      if (!input.files || !input.files[0]) {
+        document.getElementById('gcfg-qr-err').textContent = '请先选择图片文件';
+        return;
+      }
+      const fd = new FormData();
+      fd.append('file', input.files[0]);
+      try {
+        const res = await fetch('/api/v1/admin/global-config/payment-qr', {
+          method: 'POST',
+          credentials: 'include',
+          body: fd,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        fillGlobalConfig(data);
+        document.getElementById('gcfg-ok').textContent = '收款码已更新';
+        input.value = '';
+      } catch (err) {
+        document.getElementById('gcfg-qr-err').textContent = err.message || '上传失败';
+      }
+    });
 
     refreshMe();
   </script>

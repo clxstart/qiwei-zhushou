@@ -49,6 +49,13 @@ go run ./cmd/server -config configs/app.toml
 | GET | `/api/v1/admin/techs/{id}` | 查看技术档案 |
 | PUT | `/api/v1/admin/techs/{id}` | 更新技术档案 |
 | DELETE | `/api/v1/admin/techs/{id}` | 删除技术档案 |
+| GET | `/api/v1/admin/global-config` | 读取全局配置（无记录返回默认） |
+| PUT | `/api/v1/admin/global-config` | 保存全局配置 |
+| POST | `/api/v1/admin/global-config/payment-qr` | multipart 上传收款码（字段 `file`） |
+| GET | `/api/v1/admin/global-config/payment-qr` | 下载当前收款码图 |
+| GET | `/api/v1/admin/global-config/placeholders` | 模板占位列表 |
+
+模板占位：`{tech_name}` `{boss_list}` `{amount}` `{tail}` `{group_name}` `{emergency}`
 
 ### 测试
 
@@ -63,9 +70,12 @@ cmd/server/          入口
 internal/app/        依赖装配
 internal/config/     配置加载
 internal/auth/       管理员鉴权与会话
-internal/store/      MySQL 与迁移
+internal/store/      MySQL 与迁移 / 素材磁盘
+internal/tech/       技术花名册
+internal/globalcfg/  全局配置与收款码
 internal/httpapi/    HTTP 路由
 web/dist/            管理壳静态资源
+data/assets/         上传素材（gitignore）
 configs/             TOML 配置
 docs tickets         .scratch/qiwei-delivery-v1/
 ```

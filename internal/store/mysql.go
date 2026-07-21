@@ -74,6 +74,23 @@ func (d *DB) Migrate(ctx context.Context) error {
 			UNIQUE KEY uk_tech_persons_userid (userid),
 			INDEX idx_tech_persons_enabled (enabled)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`CREATE TABLE IF NOT EXISTS global_config (
+			id TINYINT PRIMARY KEY,
+			delivery_notice MEDIUMTEXT NOT NULL,
+			biz_flow_text MEDIUMTEXT NOT NULL,
+			biz_feature_text MEDIUMTEXT NOT NULL,
+			biz_extend_text MEDIUMTEXT NOT NULL,
+			group_name_suffix VARCHAR(128) NOT NULL DEFAULT '',
+			emergency_contact VARCHAR(255) NOT NULL DEFAULT '',
+			emergency_userid VARCHAR(64) NOT NULL DEFAULT '',
+			trigger_scope VARCHAR(32) NOT NULL DEFAULT 'external_only',
+			tpl_role_announcement MEDIUMTEXT NOT NULL,
+			tpl_tech_intro MEDIUMTEXT NOT NULL,
+			tpl_payment_code MEDIUMTEXT NOT NULL,
+			tpl_settle_notice MEDIUMTEXT NOT NULL,
+			payment_qr_path VARCHAR(512) NOT NULL DEFAULT '',
+			updated_at BIGINT NOT NULL
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 	}
 	for _, stmt := range stmts {
 		if _, err := d.SQL.ExecContext(ctx, stmt); err != nil {

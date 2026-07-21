@@ -7,6 +7,7 @@ import (
 
 	"github.com/clxstart/qiwei-zhushou/internal/auth"
 	"github.com/clxstart/qiwei-zhushou/internal/config"
+	"github.com/clxstart/qiwei-zhushou/internal/globalcfg"
 	"github.com/clxstart/qiwei-zhushou/internal/httpapi"
 	"github.com/clxstart/qiwei-zhushou/internal/store"
 	"github.com/clxstart/qiwei-zhushou/internal/tech"
@@ -19,6 +20,7 @@ type Container struct {
 	Authn  *auth.Authenticator
 	Sess   *auth.SessionManager
 	Techs  *tech.Service
+	GCfg   *globalcfg.Service
 	HTTP   *httpapi.Server
 }
 
@@ -55,7 +57,13 @@ func (c *Container) Initialize(cfgPath string) error {
 		time.Duration(cfg.Session.TTLSeconds)*time.Second,
 	)
 	c.Techs = tech.NewService(store.NewTechStore(db))
-	c.HTTP = httpapi.NewServer(cfg, c.Authn, c.Sess, db, c.Techs)
+	assets, err := store.NewFileAssetStore("data/assets")
+	if err != nil {
+		_ = db.Close()
+		return fmt.Errorf("asset store: %w", err)
+	}
+	c.GCfg = globalcfg.NewService(store.NewGlobalConfigStore(db), assets)
+	c.HTTP = httpapi.NewServer(cfg, c.Authn, c.Sess, db, c.Techs, c.GCfg)
 	return nil
 }
 

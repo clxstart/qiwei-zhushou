@@ -13,5 +13,6 @@ Thumbs.db
 .vscode/
 configs/app.toml
 configs/app.local.toml
+data/assets/
 .scratch/**/tmp/
 

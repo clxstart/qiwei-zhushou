@@ -14,6 +14,7 @@ import (
 
 	"github.com/clxstart/qiwei-zhushou/internal/auth"
 	"github.com/clxstart/qiwei-zhushou/internal/config"
+	"github.com/clxstart/qiwei-zhushou/internal/globalcfg"
 	"github.com/clxstart/qiwei-zhushou/internal/tech"
 )
 
@@ -29,11 +30,12 @@ type Server struct {
 	sess   *auth.SessionManager
 	pinger HealthPinger
 	techs  *tech.Service
+	gcfg   *globalcfg.Service
 	mux    *http.ServeMux
 }
 
-func NewServer(cfg *config.Config, authn *auth.Authenticator, sess *auth.SessionManager, pinger HealthPinger, techs *tech.Service) *Server {
-	s := &Server{cfg: cfg, authn: authn, sess: sess, pinger: pinger, techs: techs, mux: http.NewServeMux()}
+func NewServer(cfg *config.Config, authn *auth.Authenticator, sess *auth.SessionManager, pinger HealthPinger, techs *tech.Service, gcfg *globalcfg.Service) *Server {
+	s := &Server{cfg: cfg, authn: authn, sess: sess, pinger: pinger, techs: techs, gcfg: gcfg, mux: http.NewServeMux()}
 	s.routes()
 	return s
 }
@@ -48,6 +50,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/admin/logout", s.handleLogout)
 	s.mux.HandleFunc("GET /api/v1/admin/me", s.requireAdmin(s.handleMe))
 	s.registerTechRoutes()
+	s.registerGlobalConfigRoutes()
 
 	// 静态资源（管理壳）
 	s.mux.Handle("/", s.staticHandler())
