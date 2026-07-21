@@ -32,41 +32,30 @@
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 28px 24px;
+      padding: 20px;
       box-shadow: 0 1px 2px rgba(0,0,0,.04);
     }
-    h1 {
-      margin: 0 0 4px;
-      font-size: 1.25rem;
-      font-weight: 650;
-    }
-    .sub {
-      margin: 0 0 20px;
-      color: var(--muted);
-      font-size: .9rem;
-    }
-    label {
-      display: block;
-      font-size: .85rem;
-      margin: 0 0 6px;
-      color: var(--muted);
-    }
-    input {
+    h1 { margin: 0 0 4px; font-size: 1.25rem; font-weight: 650; }
+    h2 { margin: 0 0 12px; font-size: 1.05rem; font-weight: 650; }
+    .sub { margin: 0 0 16px; color: var(--muted); font-size: .9rem; }
+    label { display: block; font-size: .85rem; margin: 0 0 6px; color: var(--muted); }
+    input, textarea, select {
       width: 100%;
-      padding: 10px 12px;
+      padding: 9px 11px;
       border: 1px solid var(--line);
       border-radius: 6px;
-      margin-bottom: 14px;
-      font-size: 1rem;
+      margin-bottom: 12px;
+      font-size: .95rem;
+      font-family: inherit;
     }
+    textarea { min-height: 64px; resize: vertical; }
     button {
-      width: 100%;
       border: 0;
       border-radius: 6px;
-      padding: 10px 12px;
+      padding: 9px 12px;
       background: var(--accent);
       color: #fff;
-      font-size: 1rem;
+      font-size: .95rem;
       cursor: pointer;
     }
     button:hover { background: var(--accent-hover); }
@@ -74,40 +63,74 @@
       background: #fff;
       color: var(--text);
       border: 1px solid var(--line);
-      margin-top: 10px;
     }
-    .err {
-      color: var(--danger);
-      font-size: .9rem;
-      min-height: 1.2em;
-      margin: 0 0 10px;
-    }
-    .ok {
-      color: var(--accent);
-      font-size: .95rem;
-    }
-    .hidden { display: none; }
+    button.danger { background: var(--danger); }
+    button.danger:hover { background: #991b1b; }
+    button.small { padding: 5px 10px; font-size: .85rem; }
+    .err { color: var(--danger); font-size: .9rem; min-height: 1.2em; margin: 0 0 10px; }
+    .ok { color: var(--accent); font-size: .95rem; }
+    .hidden { display: none !important; }
     .appbar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 14px 20px;
+      gap: 12px;
+      padding: 12px 18px;
       background: #fff;
       border-bottom: 1px solid var(--line);
     }
     .appbar strong { font-weight: 650; }
-    .panel {
-      max-width: 720px;
-      margin: 24px auto;
-      padding: 0 16px;
+    .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+    .nav button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .panel { max-width: 980px; margin: 20px auto; padding: 0 16px 32px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 14px;
     }
-    .panel .card { padding: 20px; }
-    code {
+    @media (max-width: 720px) {
+      .grid2 { grid-template-columns: 1fr; }
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .9rem;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 8px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 600; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: .75rem;
+      background: #ecfdf5;
+      color: #047857;
+      border: 1px solid #a7f3d0;
+    }
+    .badge.off {
       background: #f3f4f6;
-      padding: 1px 6px;
-      border-radius: 4px;
-      font-size: .9em;
+      color: #6b7280;
+      border-color: #e5e7eb;
     }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .checkline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 4px 0 14px;
+      color: var(--text);
+      font-size: .95rem;
+    }
+    .checkline input { width: auto; margin: 0; }
+    .form-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .form-actions button { width: auto; min-width: 88px; }
+    #login-form button { width: 100%; }
   </style>
 </head>
 <body>
@@ -129,17 +152,90 @@
   <div id="app-view" class="hidden">
     <div class="appbar">
       <strong>企微交付助手 · 管理台</strong>
-      <div>
-        <span id="who" class="sub" style="margin-right:12px"></span>
-        <button id="logout-btn" class="secondary" style="width:auto;padding:6px 12px">退出</button>
+      <div class="nav">
+        <button type="button" class="secondary small active" data-page="home">首页</button>
+        <button type="button" class="secondary small" data-page="techs">技术花名册</button>
+      </div>
+      <div class="row">
+        <span id="who" class="sub" style="margin:0"></span>
+        <button id="logout-btn" class="secondary small">退出</button>
       </div>
     </div>
+
     <div class="panel">
-      <div class="card">
-        <p class="ok">登录成功。骨架已就绪（票 01）。</p>
-        <p class="sub">后续：花名册、全局配置、建群流水线、群账务与总账将挂到本壳。</p>
-        <p>健康检查：<code id="health">…</code></p>
-      </div>
+      <section id="page-home" class="card">
+        <h2>首页</h2>
+        <p class="ok">已登录。票 01 骨架 + 票 02 花名册可用。</p>
+        <p class="sub">健康检查：<code id="health">…</code></p>
+      </section>
+
+      <section id="page-techs" class="hidden">
+        <div class="card" style="margin-bottom:14px">
+          <h2 id="tech-form-title">新增技术</h2>
+          <p id="tech-err" class="err"></p>
+          <form id="tech-form">
+            <input type="hidden" id="tech-id" />
+            <div class="grid2">
+              <div>
+                <label for="tech-userid">企微 UserID *</label>
+                <input id="tech-userid" required />
+              </div>
+              <div>
+                <label for="tech-name">姓名 *</label>
+                <input id="tech-name" required />
+              </div>
+              <div>
+                <label for="tech-stack">技术栈</label>
+                <input id="tech-stack" placeholder="Go, MySQL, 企微 API" />
+              </div>
+              <div>
+                <label for="tech-work-time">工作时间</label>
+                <input id="tech-work-time" placeholder="10:00-19:00" />
+              </div>
+              <div>
+                <label for="tech-name-tag">群名标识</label>
+                <input id="tech-name-tag" placeholder="🔧后端" />
+              </div>
+              <div>
+                <label class="checkline" for="tech-enabled">
+                  <input id="tech-enabled" type="checkbox" checked />
+                  启用（禁用后不参与建群匹配）
+                </label>
+              </div>
+            </div>
+            <label for="tech-intro">一句话介绍</label>
+            <textarea id="tech-intro" placeholder="主要负责后端与部署"></textarea>
+            <div class="form-actions">
+              <button type="submit" id="tech-submit">保存</button>
+              <button type="button" class="secondary" id="tech-reset">清空/取消编辑</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:10px">
+            <h2 style="margin:0">花名册列表</h2>
+            <button type="button" class="secondary small" id="tech-refresh">刷新</button>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>姓名</th>
+                  <th>UserID</th>
+                  <th>标识</th>
+                  <th>状态</th>
+                  <th>技术栈</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="tech-tbody">
+                <tr><td colspan="6" class="sub">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 
@@ -149,6 +245,8 @@
     const loginErr = document.getElementById('login-err');
     const who = document.getElementById('who');
     const healthEl = document.getElementById('health');
+    const techErr = document.getElementById('tech-err');
+    const techTbody = document.getElementById('tech-tbody');
 
     async function api(path, opts = {}) {
       const res = await fetch(path, {
@@ -164,6 +262,19 @@
       }
       return data;
     }
+
+    function showPage(name) {
+      document.getElementById('page-home').classList.toggle('hidden', name !== 'home');
+      document.getElementById('page-techs').classList.toggle('hidden', name !== 'techs');
+      document.querySelectorAll('.nav [data-page]').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.page === name);
+      });
+      if (name === 'techs') loadTechs();
+    }
+
+    document.querySelectorAll('.nav [data-page]').forEach((btn) => {
+      btn.addEventListener('click', () => showPage(btn.dataset.page));
+    });
 
     async function refreshMe() {
       try {
@@ -184,12 +295,13 @@
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       loginErr.textContent = '';
-      const username = document.getElementById('username').value;
-      const password = document.getElementById('password').value;
       try {
         await api('/api/v1/admin/login', {
           method: 'POST',
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({
+            username: document.getElementById('username').value,
+            password: document.getElementById('password').value,
+          }),
         });
         await refreshMe();
       } catch (err) {
@@ -201,6 +313,121 @@
       await api('/api/v1/admin/logout', { method: 'POST' });
       await refreshMe();
     });
+
+    function resetTechForm() {
+      document.getElementById('tech-id').value = '';
+      document.getElementById('tech-userid').value = '';
+      document.getElementById('tech-name').value = '';
+      document.getElementById('tech-stack').value = '';
+      document.getElementById('tech-work-time').value = '';
+      document.getElementById('tech-name-tag').value = '';
+      document.getElementById('tech-intro').value = '';
+      document.getElementById('tech-enabled').checked = true;
+      document.getElementById('tech-form-title').textContent = '新增技术';
+      document.getElementById('tech-submit').textContent = '保存';
+      techErr.textContent = '';
+    }
+
+    function fillTechForm(p) {
+      document.getElementById('tech-id').value = p.id || '';
+      document.getElementById('tech-userid').value = p.userid || '';
+      document.getElementById('tech-name').value = p.name || '';
+      document.getElementById('tech-stack').value = p.stack || '';
+      document.getElementById('tech-work-time').value = p.work_time || '';
+      document.getElementById('tech-name-tag').value = p.name_tag || '';
+      document.getElementById('tech-intro').value = p.intro || '';
+      document.getElementById('tech-enabled').checked = !!p.enabled;
+      document.getElementById('tech-form-title').textContent = '编辑技术';
+      document.getElementById('tech-submit').textContent = '更新';
+      techErr.textContent = '';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function techPayload() {
+      return {
+        userid: document.getElementById('tech-userid').value.trim(),
+        name: document.getElementById('tech-name').value.trim(),
+        stack: document.getElementById('tech-stack').value.trim(),
+        work_time: document.getElementById('tech-work-time').value.trim(),
+        name_tag: document.getElementById('tech-name-tag').value.trim(),
+        intro: document.getElementById('tech-intro').value.trim(),
+        enabled: document.getElementById('tech-enabled').checked,
+      };
+    }
+
+    async function loadTechs() {
+      techTbody.innerHTML = '<tr><td colspan="6" class="sub">加载中…</td></tr>';
+      try {
+        const data = await api('/api/v1/admin/techs');
+        const items = data.items || [];
+        if (!items.length) {
+          techTbody.innerHTML = '<tr><td colspan="6" class="sub">暂无技术档案</td></tr>';
+          return;
+        }
+        techTbody.innerHTML = items.map((p) => `
+          <tr>
+            <td>${esc(p.name)}<div class="sub" style="margin:4px 0 0">${esc(p.work_time || '')}</div></td>
+            <td><code>${esc(p.userid)}</code></td>
+            <td>${esc(p.name_tag || '-')}</td>
+            <td><span class="badge ${p.enabled ? '' : 'off'}">${p.enabled ? '启用' : '禁用'}</span></td>
+            <td>${esc(p.stack || '-')}<div class="sub" style="margin:4px 0 0">${esc(p.intro || '')}</div></td>
+            <td class="actions">
+              <button type="button" class="secondary small" data-edit="${esc(p.id)}">编辑</button>
+              <button type="button" class="danger small" data-del="${esc(p.id)}">删除</button>
+            </td>
+          </tr>
+        `).join('');
+        techTbody.querySelectorAll('[data-edit]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const p = await api('/api/v1/admin/techs/' + btn.dataset.edit);
+            fillTechForm(p);
+          });
+        });
+        techTbody.querySelectorAll('[data-del]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('确认删除该技术档案？')) return;
+            try {
+              await api('/api/v1/admin/techs/' + btn.dataset.del, { method: 'DELETE' });
+              if (document.getElementById('tech-id').value === btn.dataset.del) resetTechForm();
+              await loadTechs();
+            } catch (err) {
+              alert(err.message || '删除失败');
+            }
+          });
+        });
+      } catch (err) {
+        techTbody.innerHTML = `<tr><td colspan="6" class="err">${esc(err.message || '加载失败')}</td></tr>`;
+      }
+    }
+
+    function esc(s) {
+      return String(s ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
+    }
+
+    document.getElementById('tech-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      techErr.textContent = '';
+      const id = document.getElementById('tech-id').value;
+      const body = techPayload();
+      try {
+        if (id) {
+          await api('/api/v1/admin/techs/' + id, { method: 'PUT', body: JSON.stringify(body) });
+        } else {
+          await api('/api/v1/admin/techs', { method: 'POST', body: JSON.stringify(body) });
+        }
+        resetTechForm();
+        await loadTechs();
+      } catch (err) {
+        techErr.textContent = err.message || '保存失败';
+      }
+    });
+
+    document.getElementById('tech-reset').addEventListener('click', resetTechForm);
+    document.getElementById('tech-refresh').addEventListener('click', loadTechs);
 
     refreshMe();
   </script>

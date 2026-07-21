@@ -9,6 +9,7 @@ import (
 	"github.com/clxstart/qiwei-zhushou/internal/config"
 	"github.com/clxstart/qiwei-zhushou/internal/httpapi"
 	"github.com/clxstart/qiwei-zhushou/internal/store"
+	"github.com/clxstart/qiwei-zhushou/internal/tech"
 )
 
 // Container 依赖装配。
@@ -17,6 +18,7 @@ type Container struct {
 	DB     *store.DB
 	Authn  *auth.Authenticator
 	Sess   *auth.SessionManager
+	Techs  *tech.Service
 	HTTP   *httpapi.Server
 }
 
@@ -52,7 +54,8 @@ func (c *Container) Initialize(cfgPath string) error {
 		store.NewSessionStore(db),
 		time.Duration(cfg.Session.TTLSeconds)*time.Second,
 	)
-	c.HTTP = httpapi.NewServer(cfg, c.Authn, c.Sess, db)
+	c.Techs = tech.NewService(store.NewTechStore(db))
+	c.HTTP = httpapi.NewServer(cfg, c.Authn, c.Sess, db, c.Techs)
 	return nil
 }
 

@@ -44,6 +44,11 @@ go run ./cmd/server -config configs/app.toml
 | POST | `/api/v1/admin/login` | `{"username","password"}` |
 | POST | `/api/v1/admin/logout` | 登出 |
 | GET | `/api/v1/admin/me` | 当前管理员（需会话） |
+| GET | `/api/v1/admin/techs` | 技术花名册列表 |
+| POST | `/api/v1/admin/techs` | 创建技术档案 |
+| GET | `/api/v1/admin/techs/{id}` | 查看技术档案 |
+| PUT | `/api/v1/admin/techs/{id}` | 更新技术档案 |
+| DELETE | `/api/v1/admin/techs/{id}` | 删除技术档案 |
 
 ### 测试
 

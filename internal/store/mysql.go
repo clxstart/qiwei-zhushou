@@ -60,6 +60,20 @@ func (d *DB) Migrate(ctx context.Context) error {
 			created_at BIGINT NOT NULL,
 			INDEX idx_admin_sessions_expires (expires_at)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`CREATE TABLE IF NOT EXISTS tech_persons (
+			id CHAR(36) PRIMARY KEY,
+			userid VARCHAR(64) NOT NULL,
+			name VARCHAR(64) NOT NULL,
+			stack VARCHAR(255) NOT NULL DEFAULT '',
+			work_time VARCHAR(128) NOT NULL DEFAULT '',
+			intro VARCHAR(512) NOT NULL DEFAULT '',
+			name_tag VARCHAR(64) NOT NULL DEFAULT '',
+			enabled TINYINT(1) NOT NULL DEFAULT 1,
+			created_at BIGINT NOT NULL,
+			updated_at BIGINT NOT NULL,
+			UNIQUE KEY uk_tech_persons_userid (userid),
+			INDEX idx_tech_persons_enabled (enabled)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 	}
 	for _, stmt := range stmts {
 		if _, err := d.SQL.ExecContext(ctx, stmt); err != nil {

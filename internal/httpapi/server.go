@@ -14,6 +14,7 @@ import (
 
 	"github.com/clxstart/qiwei-zhushou/internal/auth"
 	"github.com/clxstart/qiwei-zhushou/internal/config"
+	"github.com/clxstart/qiwei-zhushou/internal/tech"
 )
 
 // HealthPinger 可选 DB 探活。
@@ -27,11 +28,12 @@ type Server struct {
 	authn  *auth.Authenticator
 	sess   *auth.SessionManager
 	pinger HealthPinger
+	techs  *tech.Service
 	mux    *http.ServeMux
 }
 
-func NewServer(cfg *config.Config, authn *auth.Authenticator, sess *auth.SessionManager, pinger HealthPinger) *Server {
-	s := &Server{cfg: cfg, authn: authn, sess: sess, pinger: pinger, mux: http.NewServeMux()}
+func NewServer(cfg *config.Config, authn *auth.Authenticator, sess *auth.SessionManager, pinger HealthPinger, techs *tech.Service) *Server {
+	s := &Server{cfg: cfg, authn: authn, sess: sess, pinger: pinger, techs: techs, mux: http.NewServeMux()}
 	s.routes()
 	return s
 }
@@ -45,6 +47,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/admin/login", s.handleLogin)
 	s.mux.HandleFunc("POST /api/v1/admin/logout", s.handleLogout)
 	s.mux.HandleFunc("GET /api/v1/admin/me", s.requireAdmin(s.handleMe))
+	s.registerTechRoutes()
 
 	// 静态资源（管理壳）
 	s.mux.Handle("/", s.staticHandler())
