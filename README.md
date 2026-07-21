@@ -82,8 +82,18 @@ go run ./cmd/server -config configs/app.toml
 ### 测试
 
 ```bash
+# 单元/HTTP 单测（假网关，无需真企微）
 go test ./...
+
+# 整体 HTTP 冒烟（需本机服务 + MySQL；默认 qw/qw_pass）
+# 终端1：
+go run ./cmd/server -config configs/app.local.toml
+# 终端2：
+node scripts/e2e-smoke.mjs
 ```
+
+覆盖：登录、入账、权限拒绝、发码、结清、反结清、汇总/列表/详情/日志、H5 页。  
+建群流水线主路径以 `internal/delivery` 假网关单测为准（真企微联调需 Corp 配置）。
 
 ## 目录
 

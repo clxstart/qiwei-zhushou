@@ -14,5 +14,8 @@ Thumbs.db
 configs/app.toml
 configs/app.local.toml
 data/assets/
+scripts/_e2e-seed.sql
+e2e-*.txt
+e2e-*.env
 .scratch/**/tmp/
 
