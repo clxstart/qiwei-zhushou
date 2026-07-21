@@ -102,13 +102,13 @@ func (c *Container) Initialize(cfgPath string) error {
 }
 
 func buildWeComGateway(cfg *config.Config) (wecom.Gateway, error) {
-	if cfg.WeCom.UseFakeGateway || !cfg.WeCom.ClientEnabled() {
-		if !cfg.WeCom.ClientEnabled() {
-			log.Printf("wecom: using FakeGateway (corp secret not configured or use_fake_gateway=true)")
-		} else {
-			log.Printf("wecom: using FakeGateway (use_fake_gateway=true)")
-		}
+	// 假网关仅在显式开启时使用；单测直接注入 wecom.NewFakeGateway()，不走这里。
+	if cfg.WeCom.UseFakeGateway {
+		log.Printf("wecom: using FakeGateway (use_fake_gateway=true)")
 		return wecom.NewFakeGateway(), nil
+	}
+	if !cfg.WeCom.ClientEnabled() {
+		return nil, fmt.Errorf("wecom: corp_id/corp_secret required when use_fake_gateway=false (fill wecom.corp_secret or set use_fake_gateway=true for local-only)")
 	}
 	client, err := wecom.NewClient(wecom.ClientConfig{
 		CorpID:              cfg.WeCom.CorpID,
@@ -120,7 +120,7 @@ func buildWeComGateway(cfg *config.Config) (wecom.Gateway, error) {
 		return nil, fmt.Errorf("wecom client: %w", err)
 	}
 	if strings.TrimSpace(cfg.WeCom.GroupWebhook) == "" {
-		log.Printf("wecom: real Client gateway (WARNING: group_webhook empty)")
+		log.Printf("wecom: real Client gateway (WARNING: group_webhook empty — 客户群发言会失败)")
 	} else {
 		log.Printf("wecom: real Client gateway (group webhook configured)")
 	}

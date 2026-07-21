@@ -47,7 +47,9 @@ type StaticConfig struct {
 	Dir string `toml:"dir"`
 }
 
-// WeComConfig 企业微信自建应用（可选；未配齐时回调返回 503，Gateway 用假实现/不可用）。
+// WeComConfig 企业微信自建应用。
+// 回调需 corp_id+token+encoding_aes_key；真 API 还需 corp_secret。
+// use_fake_gateway=false 且未配 secret 时装配失败，不再静默降级假网关。
 type WeComConfig struct {
 	CorpID         string `toml:"corp_id"`
 	CorpSecret     string `toml:"corp_secret"`
@@ -56,7 +58,8 @@ type WeComConfig struct {
 	EncodingAESKey string `toml:"encoding_aes_key"`
 	// CallbackPath 默认 /wecom/callback
 	CallbackPath string `toml:"callback_path"`
-	// UseFakeGateway 开发默认 true：不调真网，注入 FakeGateway
+	// UseFakeGateway 为 true 时注入 FakeGateway（本地无密钥临时自测）。
+	// 真联调必须 false，并配置 corp_id/corp_secret。单测直接构造 FakeGateway。
 	UseFakeGateway bool `toml:"use_fake_gateway"`
 	// GroupWebhook 客户群发消息用的群机器人 Webhook（外部客户群实用通道）
 	GroupWebhook string `toml:"group_webhook"`

@@ -13,9 +13,25 @@ Thumbs.db
 .vscode/
 configs/app.toml
 configs/app.local.toml
+configs/app.local.toml.bak
 data/assets/
 scripts/_e2e-seed.sql
 e2e-*.txt
 e2e-*.env
 .scratch/**/tmp/
 
+# 本地截图与素材，不提交到 git
+wecom-setup-shots/
+
+# 图片文件不提交
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+*.ico
+*.tif
+*.tiff
+*.heic
+*.avif

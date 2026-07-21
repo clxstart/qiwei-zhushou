@@ -77,7 +77,9 @@ go run ./cmd/server -config configs/app.toml
 
 模板占位：`{tech_name}` `{boss_list}` `{amount}` `{tail}` `{group_name}` `{emergency}`
 
-企微配置见 `configs/app.example.toml` 的 `[wecom]`。开发默认 `use_fake_gateway = true`。
+企微配置见 `configs/app.example.toml` 的 `[wecom]`。  
+真联调：`use_fake_gateway = false`，并填写 `corp_secret`（未配 secret 时服务拒绝启动，不再静默假网关）。  
+单测仍直接注入 `FakeGateway`，不依赖配置开关。
 
 ### 测试
 
@@ -86,6 +88,7 @@ go run ./cmd/server -config configs/app.toml
 go test ./...
 
 # 整体 HTTP 冒烟（需本机服务 + MySQL；默认 qw/qw_pass）
+# 若尚未填 corp_secret：临时 use_fake_gateway=true 再启动；真联调则填 secret 后用 false
 # 终端1：
 go run ./cmd/server -config configs/app.local.toml
 # 终端2：
@@ -100,7 +103,7 @@ node scripts/e2e-smoke.mjs
 见 [docs/WECOM_CONNECT.md](./docs/WECOM_CONNECT.md)。
 
 ```bash
-# 配置检查 + gettoken
+# 配置检查 + gettoken（需 corp_secret，use_fake_gateway=false）
 go run ./cmd/wecom-check -config configs/app.local.toml
 ```
 

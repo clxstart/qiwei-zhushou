@@ -31,7 +31,8 @@ agent_id = 0
 token = ""
 encoding_aes_key = ""
 callback_path = "/wecom/callback"
-# true：不调用真企微 API，注入 FakeGateway（推荐开发/单测）
-use_fake_gateway = true
+# true：注入 FakeGateway（仅本地无密钥时临时自测；单测直接 new FakeGateway，不依赖此项）
+# 真联调必须 false，并配置 corp_secret
+use_fake_gateway = false
 # 客户群发消息：群机器人 Webhook（外部客户群实用通道；自建应用无法直接往客户群自由发言）
 group_webhook = ""
