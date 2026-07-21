@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/clxstart/qiwei-zhushou/internal/auth"
@@ -110,14 +111,19 @@ func buildWeComGateway(cfg *config.Config) (wecom.Gateway, error) {
 		return wecom.NewFakeGateway(), nil
 	}
 	client, err := wecom.NewClient(wecom.ClientConfig{
-		CorpID:     cfg.WeCom.CorpID,
-		CorpSecret: cfg.WeCom.CorpSecret,
-		AgentID:    cfg.WeCom.AgentID,
+		CorpID:              cfg.WeCom.CorpID,
+		CorpSecret:          cfg.WeCom.CorpSecret,
+		AgentID:             cfg.WeCom.AgentID,
+		DefaultGroupWebhook: cfg.WeCom.GroupWebhook,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("wecom client: %w", err)
 	}
-	log.Printf("wecom: using real Client gateway")
+	if strings.TrimSpace(cfg.WeCom.GroupWebhook) == "" {
+		log.Printf("wecom: real Client gateway (WARNING: group_webhook empty)")
+	} else {
+		log.Printf("wecom: real Client gateway (group webhook configured)")
+	}
 	return client, nil
 }
 

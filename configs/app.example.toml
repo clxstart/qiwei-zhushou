@@ -23,6 +23,7 @@ cookie_secure = false
 dir = "web/dist"
 
 # 企业微信自建应用（可选；本地开发可先用假网关）
+# 也可用环境变量：WECOM_CORP_ID / WECOM_CORP_SECRET / WECOM_TOKEN / WECOM_ENCODING_AES_KEY / WECOM_GROUP_WEBHOOK
 [wecom]
 corp_id = ""
 corp_secret = ""
@@ -32,3 +33,5 @@ encoding_aes_key = ""
 callback_path = "/wecom/callback"
 # true：不调用真企微 API，注入 FakeGateway（推荐开发/单测）
 use_fake_gateway = true
+# 客户群发消息：群机器人 Webhook（外部客户群实用通道；自建应用无法直接往客户群自由发言）
+group_webhook = ""

@@ -19,19 +19,23 @@ import (
 type ClientConfig struct {
 	CorpID     string
 	CorpSecret string
-	// AgentID 应用 AgentId（发应用消息等场景；客户群接口主要用 chatid）
+	// AgentID 应用 AgentId
 	AgentID int64
 	// BaseURL 默认 https://qyapi.weixin.qq.com
 	BaseURL string
-	// HTTPClient 可注入
-	HTTPClient *http.Client
-	// Logger 可注入
-	Logger *log.Logger
-	// MaxRetries token 失效等可重试次数
-	MaxRetries int
+	// DefaultGroupWebhook 客户群发消息默认群机器人 Webhook（可被 chat 级覆盖）
+	DefaultGroupWebhook string
+	// ChatWebhooks chat_id -> webhook，优先于默认
+	ChatWebhooks map[string]string
+	HTTPClient   *http.Client
+	Logger       *log.Logger
+	MaxRetries   int
 }
 
-// Client 真企微 Gateway 实现（V1 最小能力）。
+// Client 真企微 Gateway：
+// - 客户群详情/改名：externalcontact/groupchat/*
+// - 客户群发消息：群机器人 Webhook（官方自建应用无法直接往外部客户群自由发消息）
+// - 素材上传：media/upload（发图前取 media_id；Webhook 发图用 base64 或 media 链路）
 type Client struct {
 	cfg    ClientConfig
 	http   *http.Client
@@ -58,10 +62,38 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 	if cfg.MaxRetries <= 0 {
 		cfg.MaxRetries = 1
 	}
+	if cfg.ChatWebhooks == nil {
+		cfg.ChatWebhooks = map[string]string{}
+	}
 	return &Client{cfg: cfg, http: cfg.HTTPClient, logger: cfg.Logger}, nil
 }
 
+func (c *Client) webhookFor(chatID string) string {
+	if u, ok := c.cfg.ChatWebhooks[chatID]; ok && strings.TrimSpace(u) != "" {
+		return strings.TrimSpace(u)
+	}
+	return strings.TrimSpace(c.cfg.DefaultGroupWebhook)
+}
+
 func (c *Client) SendText(ctx context.Context, chatID, content string, mentionUserIDs []string) error {
+	// 客户群：Webhook 文本（@ 用 markdown 的 <@userid> 尽力表达）
+	wh := c.webhookFor(chatID)
+	if wh != "" {
+		text := content
+		if len(mentionUserIDs) > 0 {
+			var ats []string
+			for _, id := range mentionUserIDs {
+				if id = strings.TrimSpace(id); id != "" {
+					ats = append(ats, "<@"+id+">")
+				}
+			}
+			if len(ats) > 0 {
+				text = strings.Join(ats, " ") + "\n" + content
+			}
+		}
+		return c.sendWebhookMarkdown(ctx, wh, text)
+	}
+	// 无 webhook 时尝试应用群聊接口（仅内部群可能成功）
 	body := map[string]any{
 		"chatid":  chatID,
 		"msgtype": "text",
@@ -70,7 +102,6 @@ func (c *Client) SendText(ctx context.Context, chatID, content string, mentionUs
 		},
 	}
 	if len(mentionUserIDs) > 0 {
-		// 客户群应用消息：部分接口用 mentioned_list；保留在 text 扩展字段供真环境联调
 		body["text"] = map[string]any{
 			"content":        content,
 			"mentioned_list": mentionUserIDs,
@@ -80,6 +111,11 @@ func (c *Client) SendText(ctx context.Context, chatID, content string, mentionUs
 }
 
 func (c *Client) SendImage(ctx context.Context, chatID, mediaID string) error {
+	wh := c.webhookFor(chatID)
+	if wh != "" {
+		// Webhook 图片：优先 media_id
+		return c.sendWebhookImage(ctx, wh, mediaID)
+	}
 	body := map[string]any{
 		"chatid":  chatID,
 		"msgtype": "image",
@@ -91,17 +127,23 @@ func (c *Client) SendImage(ctx context.Context, chatID, mediaID string) error {
 }
 
 func (c *Client) RenameGroup(ctx context.Context, chatID, name string) error {
-	// 外部客户群改名走 externalcontact/groupchat 相关接口；
-	// 内部群应用群聊用 appchat/update。V1 先实现 appchat/update，客户群在联调时按权限切换。
+	// 客户群改名（旧仓使用的 modify 接口）
 	body := map[string]any{
-		"chatid": chatID,
-		"name":   name,
+		"chat_id": chatID,
+		"name":    name,
 	}
-	return c.postJSON(ctx, "/cgi-bin/appchat/update", body, nil)
+	if err := c.postJSON(ctx, "/cgi-bin/externalcontact/groupchat/update", body, nil); err == nil {
+		return nil
+	} else {
+		// 兼容部分文档/环境的 modify 路径
+		if err2 := c.postJSON(ctx, "/cgi-bin/externalcontact/groupchat/modify", body, nil); err2 == nil {
+			return nil
+		}
+		return err
+	}
 }
 
 func (c *Client) GetGroup(ctx context.Context, chatID string) (*GroupInfo, error) {
-	// 优先客户群详情；失败时业务层可再试。协议层如实返回 API 错误。
 	var resp struct {
 		GroupChat struct {
 			ChatID string `json:"chat_id"`
@@ -183,6 +225,81 @@ func (c *Client) UploadImage(ctx context.Context, filename string, data []byte) 
 	return out.MediaID, nil
 }
 
+// PingToken 联调用：验证 corpid/secret 能否取 token。
+func (c *Client) PingToken(ctx context.Context) (string, error) {
+	tok, err := c.getToken(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(tok) > 8 {
+		return tok[:4] + "..." + tok[len(tok)-4:], nil
+	}
+	return "***", nil
+}
+
+func (c *Client) sendWebhookMarkdown(ctx context.Context, webhookURL, content string) error {
+	payload := map[string]any{
+		"msgtype": "markdown",
+		"markdown": map[string]string{
+			"content": content,
+		},
+	}
+	return c.postWebhook(ctx, webhookURL, payload)
+}
+
+func (c *Client) sendWebhookImage(ctx context.Context, webhookURL, mediaID string) error {
+	// 群机器人支持 image.md5+base64；media_id 路径因机器人类型而异。
+	// 这里用 text 兜底提示 media_id，优先尝试 image media_id 扩展字段。
+	payload := map[string]any{
+		"msgtype": "image",
+		"image": map[string]string{
+			"media_id": mediaID,
+		},
+	}
+	if err := c.postWebhook(ctx, webhookURL, payload); err != nil {
+		// 降级：发一条文字提示（避免整单失败）
+		c.logger.Printf("wecom webhook image failed, fallback text: %v", err)
+		return c.sendWebhookMarkdown(ctx, webhookURL, "【收款码图片】发送失败，请管理员在后台确认收款码素材。media_id="+mediaID)
+	}
+	return nil
+}
+
+func (c *Client) postWebhook(ctx context.Context, webhookURL string, payload any) error {
+	if strings.TrimSpace(webhookURL) == "" {
+		return fmt.Errorf("%w: group webhook empty", ErrNotConfigured)
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := c.http.Do(req)
+	if err != nil {
+		c.logger.Printf("wecom webhook request failed: %v", err)
+		return err
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("%w: webhook http %d %s", ErrAPI, res.StatusCode, string(body))
+	}
+	var out struct {
+		ErrCode int    `json:"errcode"`
+		ErrMsg  string `json:"errmsg"`
+	}
+	// 部分 webhook 返回空 body
+	if len(bytes.TrimSpace(body)) > 0 {
+		if err := json.Unmarshal(body, &out); err == nil && out.ErrCode != 0 {
+			return fmt.Errorf("%w: webhook %d %s", ErrAPI, out.ErrCode, out.ErrMsg)
+		}
+	}
+	return nil
+}
+
 func (c *Client) getToken(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -256,7 +373,6 @@ func (c *Client) postJSON(ctx context.Context, path string, body any, out any) e
 		if err := json.Unmarshal(raw, &base); err != nil {
 			return fmt.Errorf("%w: decode %s: %v", ErrAPI, path, err)
 		}
-		// 42001/40014 token 问题 → 清 token 重试
 		if base.ErrCode == 42001 || base.ErrCode == 40014 {
 			c.mu.Lock()
 			c.accessToken = ""
@@ -266,7 +382,7 @@ func (c *Client) postJSON(ctx context.Context, path string, body any, out any) e
 			continue
 		}
 		if base.ErrCode != 0 {
-			c.logger.Printf("wecom api %s errcode=%d errmsg=%s", path, base.ErrCode, base.ErrMsg)
+			c.logger.Printf("wecom api %s errcode=%d errmsg=%s body=%s", path, base.ErrCode, base.ErrMsg, string(raw))
 			return fmt.Errorf("%w: %d %s", ErrAPI, base.ErrCode, base.ErrMsg)
 		}
 		if out != nil {

@@ -93,7 +93,16 @@ node scripts/e2e-smoke.mjs
 ```
 
 覆盖：登录、入账、权限拒绝、发码、结清、反结清、汇总/列表/详情/日志、H5 页。  
-建群流水线主路径以 `internal/delivery` 假网关单测为准（真企微联调需 Corp 配置）。
+建群流水线主路径以 `internal/delivery` 假网关单测为准。
+
+### 真企微联调
+
+见 [docs/WECOM_CONNECT.md](./docs/WECOM_CONNECT.md)。
+
+```bash
+# 配置检查 + gettoken
+go run ./cmd/wecom-check -config configs/app.local.toml
+```
 
 ## 目录
 

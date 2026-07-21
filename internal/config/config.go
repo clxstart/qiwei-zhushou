@@ -58,6 +58,8 @@ type WeComConfig struct {
 	CallbackPath string `toml:"callback_path"`
 	// UseFakeGateway 开发默认 true：不调真网，注入 FakeGateway
 	UseFakeGateway bool `toml:"use_fake_gateway"`
+	// GroupWebhook 客户群发消息用的群机器人 Webhook（外部客户群实用通道）
+	GroupWebhook string `toml:"group_webhook"`
 }
 
 // Enabled 回调加解密所需三项是否齐全。
@@ -117,6 +119,9 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("WECOM_ENCODING_AES_KEY"); v != "" {
 		cfg.WeCom.EncodingAESKey = v
+	}
+	if v := os.Getenv("WECOM_GROUP_WEBHOOK"); v != "" {
+		cfg.WeCom.GroupWebhook = v
 	}
 }
 
