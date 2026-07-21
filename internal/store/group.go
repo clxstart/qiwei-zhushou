@@ -55,6 +55,47 @@ func (s *GroupStore) GetByChatID(ctx context.Context, chatID string) (*delivery.
 	return &g, nil
 }
 
+func (s *GroupStore) List(ctx context.Context) ([]delivery.GroupChat, error) {
+	rows, err := s.db.SQL.QueryContext(ctx, `
+		SELECT chat_id, name, creator_userid, is_external, members_json,
+		       selected_tech_userid, selected_tech_name, selected_tech_tag,
+		       steps_json, created_at, updated_at
+		FROM group_chats ORDER BY updated_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []delivery.GroupChat
+	for rows.Next() {
+		var (
+			g                      delivery.GroupChat
+			isExternal             int
+			membersJSON, stepsJSON string
+			createdAt, updatedAt   int64
+		)
+		if err := rows.Scan(
+			&g.ChatID, &g.Name, &g.CreatorUserID, &isExternal, &membersJSON,
+			&g.SelectedTechUserID, &g.SelectedTechName, &g.SelectedTechTag,
+			&stepsJSON, &createdAt, &updatedAt,
+		); err != nil {
+			return nil, err
+		}
+		g.IsExternal = isExternal == 1
+		g.Members, err = delivery.ParseMembersJSON(membersJSON)
+		if err != nil {
+			return nil, err
+		}
+		g.Steps, err = delivery.ParseStepsJSON(stepsJSON)
+		if err != nil {
+			return nil, err
+		}
+		g.CreatedAt = time.Unix(createdAt, 0).UTC()
+		g.UpdatedAt = time.Unix(updatedAt, 0).UTC()
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
 func (s *GroupStore) Save(ctx context.Context, g *delivery.GroupChat) error {
 	membersJSON, err := g.MembersJSON()
 	if err != nil {

@@ -66,6 +66,12 @@ go run ./cmd/server -config configs/app.toml
 | POST | `/api/v1/admin/groups/{chat_id}/replay-step` | 补发流水线某步 `{"step":"..."}` |
 | GET | `/api/v1/admin/op-logs` | 最近操作日志 |
 | GET | `/api/v1/admin/groups/{chat_id}/op-logs` | 某群操作日志 |
+| GET | `/api/v1/admin/groups` | 群账务列表（总账） |
+| GET | `/api/v1/admin/groups/{chat_id}/detail` | 群详情（成员/步骤/账/日志） |
+| GET | `/api/v1/admin/summary` | 今日/本月收入、未结清数等 |
+| GET | `/api/v1/admin/ledgers` | 总账别名（同 groups 概览） |
+
+收入定义：已结清群的 `total`，按账本 `updated_at`（结清时刻）计入今日/本月（UTC+8）。
 | — | `/h5/payment?chat_id=` | 录入金额 H5 壳 |
 
 

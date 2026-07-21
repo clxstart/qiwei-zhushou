@@ -154,6 +154,7 @@
       <strong>企微交付助手 · 管理台</strong>
       <div class="nav">
         <button type="button" class="secondary small active" data-page="home">首页</button>
+        <button type="button" class="secondary small" data-page="ledger">总账</button>
         <button type="button" class="secondary small" data-page="techs">技术花名册</button>
         <button type="button" class="secondary small" data-page="gcfg">全局配置</button>
       </div>
@@ -166,8 +167,47 @@
     <div class="panel">
       <section id="page-home" class="card">
         <h2>首页</h2>
-        <p class="ok">已登录。票 01–03：骨架、花名册、全局配置可用。</p>
+        <p class="ok">已登录。V1 票 01–10 能力已挂载。</p>
         <p class="sub">健康检查：<code id="health">…</code></p>
+        <div id="home-summary" class="meta" style="margin-top:12px">汇总加载中…</div>
+      </section>
+
+      <section id="page-ledger" class="hidden">
+        <div class="card" style="margin-bottom:14px">
+          <div class="row" style="justify-content:space-between;margin-bottom:10px">
+            <h2 style="margin:0">总账汇总</h2>
+            <button type="button" class="secondary small" id="ledger-refresh">刷新</button>
+          </div>
+          <div id="ledger-summary" class="meta">…</div>
+          <p class="sub" style="margin-top:8px">收入按「已结清」群的合同总价，以结清更新日计入今日/本月（UTC+8）。</p>
+        </div>
+        <div class="card" style="margin-bottom:14px">
+          <h2>群账务列表</h2>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>群名</th>
+                  <th>状态</th>
+                  <th>定金</th>
+                  <th>总价</th>
+                  <th>尾款</th>
+                  <th>发码</th>
+                  <th>结清</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="ledger-tbody">
+                <tr><td colspan="8" class="sub">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card" id="ledger-detail-card">
+          <h2>群详情</h2>
+          <p class="sub" id="ledger-detail-hint">点击列表「详情」查看成员、流水线与日志</p>
+          <pre id="ledger-detail" style="white-space:pre-wrap;font-size:.85rem;margin:0;max-height:420px;overflow:auto"></pre>
+        </div>
       </section>
 
       <section id="page-gcfg" class="hidden">
@@ -329,11 +369,79 @@
       document.getElementById('page-home').classList.toggle('hidden', name !== 'home');
       document.getElementById('page-techs').classList.toggle('hidden', name !== 'techs');
       document.getElementById('page-gcfg').classList.toggle('hidden', name !== 'gcfg');
+      document.getElementById('page-ledger').classList.toggle('hidden', name !== 'ledger');
       document.querySelectorAll('.nav [data-page]').forEach((btn) => {
         btn.classList.toggle('active', btn.dataset.page === name);
       });
+      if (name === 'home') loadHomeSummary();
       if (name === 'techs') loadTechs();
       if (name === 'gcfg') loadGlobalConfig();
+      if (name === 'ledger') loadLedgerPage();
+    }
+
+    async function loadHomeSummary() {
+      try {
+        const s = await api('/api/v1/admin/summary');
+        document.getElementById('home-summary').innerHTML =
+          '今日收入：' + s.today_income +
+          ' · 本月收入：' + s.month_income +
+          ' · 未结清：' + s.unsettled_count +
+          ' · 已结清：' + s.settled_count +
+          ' · 群数：' + s.group_count;
+      } catch (e) {
+        document.getElementById('home-summary').textContent = e.message || '汇总失败';
+      }
+    }
+
+    async function loadLedgerPage() {
+      const tbody = document.getElementById('ledger-tbody');
+      tbody.innerHTML = '<tr><td colspan="8" class="sub">加载中…</td></tr>';
+      try {
+        const [sum, list] = await Promise.all([
+          api('/api/v1/admin/summary'),
+          api('/api/v1/admin/groups'),
+        ]);
+        document.getElementById('ledger-summary').innerHTML =
+          '今日收入 <strong>' + sum.today_income + '</strong>　' +
+          '本月收入 <strong>' + sum.month_income + '</strong>　' +
+          '未结清 <strong>' + sum.unsettled_count + '</strong>　' +
+          '已结清 <strong>' + sum.settled_count + '</strong>　' +
+          '入账总额 <strong>' + sum.total_booked_amount + '</strong>';
+        const items = list.items || [];
+        if (!items.length) {
+          tbody.innerHTML = '<tr><td colspan="8" class="sub">暂无群记录</td></tr>';
+          return;
+        }
+        tbody.innerHTML = items.map((o) => `
+          <tr>
+            <td>${esc(o.name || o.chat_id)}<div class="sub" style="margin:4px 0 0"><code>${esc(o.chat_id)}</code></div></td>
+            <td>${esc(o.ledger_status)}</td>
+            <td>${o.deposit || 0}</td>
+            <td>${o.total || 0}</td>
+            <td>${o.tail || 0}</td>
+            <td>${o.code_sent ? '是(' + (o.code_sent_count || 0) + ')' : '否'}</td>
+            <td>${o.settled ? '是' : '否'}</td>
+            <td><button type="button" class="secondary small" data-detail="${esc(o.chat_id)}">详情</button></td>
+          </tr>
+        `).join('');
+        tbody.querySelectorAll('[data-detail]').forEach((btn) => {
+          btn.addEventListener('click', () => loadGroupDetail(btn.dataset.detail));
+        });
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="8" class="err">${esc(err.message || '加载失败')}</td></tr>`;
+      }
+    }
+
+    async function loadGroupDetail(chatId) {
+      const el = document.getElementById('ledger-detail');
+      document.getElementById('ledger-detail-hint').textContent = '群 ' + chatId;
+      el.textContent = '加载中…';
+      try {
+        const d = await api('/api/v1/admin/groups/' + encodeURIComponent(chatId) + '/detail');
+        el.textContent = JSON.stringify(d, null, 2);
+      } catch (err) {
+        el.textContent = err.message || '加载失败';
+      }
     }
 
     document.querySelectorAll('.nav [data-page]').forEach((btn) => {
@@ -492,6 +600,7 @@
 
     document.getElementById('tech-reset').addEventListener('click', resetTechForm);
     document.getElementById('tech-refresh').addEventListener('click', loadTechs);
+    document.getElementById('ledger-refresh').addEventListener('click', loadLedgerPage);
 
     function fillGlobalConfig(cfg) {
       document.getElementById('gcfg-trigger').value = cfg.trigger_scope || 'external_only';

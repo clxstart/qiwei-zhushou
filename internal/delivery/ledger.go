@@ -47,6 +47,7 @@ func (l *Ledger) recomputeTail() {
 // LedgerStore 账本持久化。
 type LedgerStore interface {
 	Get(ctx context.Context, chatID string) (*Ledger, error)
+	List(ctx context.Context) ([]Ledger, error)
 	Save(ctx context.Context, l *Ledger) error
 }
 
@@ -66,6 +67,14 @@ func (s *MemoryLedgerStore) Get(_ context.Context, chatID string) (*Ledger, erro
 	}
 	cp := *l
 	return &cp, nil
+}
+
+func (s *MemoryLedgerStore) List(_ context.Context) ([]Ledger, error) {
+	out := make([]Ledger, 0, len(s.data))
+	for _, l := range s.data {
+		out = append(out, *l)
+	}
+	return out, nil
 }
 
 func (s *MemoryLedgerStore) Save(_ context.Context, l *Ledger) error {
@@ -128,7 +137,20 @@ func (b *Bot) RecordPayment(ctx context.Context, chatID string, actor Actor, dep
 		return nil, err
 	}
 	// 明确：不调用 gw.SendText
+	actorID := actor.UserID
+	if actor.IsAdmin {
+		actorID = "admin"
+	}
+	b.writeOp(ctx, actorID, pickAction(actor.IsAdmin, OpAdminPayment, "record_payment"), chatID,
+		fmt.Sprintf("deposit=%d total=%d tail=%d", led.Deposit, led.Total, led.Tail), "ok")
 	return led, nil
+}
+
+func pickAction(isAdmin bool, adminAction, staffAction string) string {
+	if isAdmin {
+		return adminAction
+	}
+	return staffAction
 }
 
 // GetLedger 读账本；无记录时返回 unbooked 空账。
@@ -230,6 +252,12 @@ func (b *Bot) SendTailPaymentCode(ctx context.Context, chatID string, actor Acto
 	if err := b.ledgers.Save(ctx, led); err != nil {
 		return nil, err
 	}
+	actorID := actor.UserID
+	if actor.IsAdmin {
+		actorID = "admin"
+	}
+	b.writeOp(ctx, actorID, pickAction(actor.IsAdmin, OpAdminSendCode, "send_code"), chatID,
+		fmt.Sprintf("tail=%d count=%d", led.Tail, led.CodeSentCount), "ok")
 	return led, nil
 }
 
@@ -282,5 +310,11 @@ func (b *Bot) Settle(ctx context.Context, chatID string, actor Actor) (*Ledger, 
 	if err := b.ledgers.Save(ctx, led); err != nil {
 		return nil, err
 	}
+	actorID := actor.UserID
+	if actor.IsAdmin {
+		actorID = "admin"
+	}
+	b.writeOp(ctx, actorID, pickAction(actor.IsAdmin, OpAdminSettle, "settle"), chatID,
+		fmt.Sprintf("total=%d tail=%d", led.Total, led.Tail), "ok")
 	return led, nil
 }

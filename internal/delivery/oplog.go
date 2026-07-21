@@ -13,6 +13,10 @@ const (
 	OpAdminPayment  = "admin_payment"
 	OpAdminSendCode = "admin_send_code"
 	OpAdminSettle   = "admin_settle"
+	// 员工动作也记日志，便于总账追溯
+	OpRecordPayment = "record_payment"
+	OpSendCode      = "send_code"
+	OpSettle        = "settle"
 )
 
 // OpLog 管理/关键账务操作日志。

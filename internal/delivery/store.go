@@ -8,6 +8,7 @@ import (
 // GroupStore 群交付记录持久化。
 type GroupStore interface {
 	GetByChatID(ctx context.Context, chatID string) (*GroupChat, error)
+	List(ctx context.Context) ([]GroupChat, error)
 	Save(ctx context.Context, g *GroupChat) error
 }
 
@@ -32,6 +33,19 @@ func (s *MemoryGroupStore) GetByChatID(_ context.Context, chatID string) (*Group
 	cp.Members = append([]MemberSnapshot(nil), g.Members...)
 	cp.Steps = append([]StepState(nil), g.Steps...)
 	return &cp, nil
+}
+
+func (s *MemoryGroupStore) List(_ context.Context) ([]GroupChat, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]GroupChat, 0, len(s.data))
+	for _, g := range s.data {
+		cp := *g
+		cp.Members = append([]MemberSnapshot(nil), g.Members...)
+		cp.Steps = append([]StepState(nil), g.Steps...)
+		out = append(out, cp)
+	}
+	return out, nil
 }
 
 func (s *MemoryGroupStore) Save(_ context.Context, g *GroupChat) error {
