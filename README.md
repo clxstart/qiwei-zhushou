@@ -54,7 +54,8 @@ go run ./cmd/server -config configs/app.toml
 | POST | `/api/v1/admin/global-config/payment-qr` | multipart 上传收款码（字段 `file`） |
 | GET | `/api/v1/admin/global-config/payment-qr` | 下载当前收款码图 |
 | GET | `/api/v1/admin/global-config/placeholders` | 模板占位列表 |
-| GET/POST | `/wecom/callback` | 企微回调（URL 验证 + 加密事件解密） |
+| GET/POST | `/wecom/callback` | 企微回调（URL 验证 + 加密事件解密；建群触发 DeliveryBot） |
+| GET | `/api/v1/admin/groups/{chat_id}` | 查看群流水线/成员/选定技术 |
 
 模板占位：`{tech_name}` `{boss_list}` `{amount}` `{tail}` `{group_name}` `{emergency}`
 
@@ -77,6 +78,7 @@ internal/store/      MySQL 与迁移 / 素材磁盘
 internal/tech/       技术花名册
 internal/globalcfg/  全局配置与收款码
 internal/wecom/      企微协议层（Crypt/Gateway/Callback）
+internal/delivery/   DeliveryBot 建群流水线（主业务 seam）
 internal/httpapi/    HTTP 路由
 web/dist/            管理壳静态资源
 data/assets/         上传素材（gitignore）

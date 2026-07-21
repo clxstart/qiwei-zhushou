@@ -9,6 +9,7 @@ import (
 
 	"github.com/clxstart/qiwei-zhushou/internal/auth"
 	"github.com/clxstart/qiwei-zhushou/internal/config"
+	"github.com/clxstart/qiwei-zhushou/internal/delivery"
 	"github.com/clxstart/qiwei-zhushou/internal/globalcfg"
 	"github.com/clxstart/qiwei-zhushou/internal/httpapi"
 	"github.com/clxstart/qiwei-zhushou/internal/store"
@@ -24,6 +25,7 @@ type Container struct {
 	Sess         *auth.SessionManager
 	Techs        *tech.Service
 	GCfg         *globalcfg.Service
+	Delivery     *delivery.Bot
 	WeComGateway wecom.Gateway
 	HTTP         *httpapi.Server
 }
@@ -68,12 +70,20 @@ func (c *Container) Initialize(cfgPath string) error {
 	}
 	c.GCfg = globalcfg.NewService(store.NewGlobalConfigStore(db), assets)
 
-	gw, cb, err := buildWeCom(cfg)
+	gw, err := buildWeComGateway(cfg)
 	if err != nil {
 		_ = db.Close()
 		return err
 	}
 	c.WeComGateway = gw
+
+	c.Delivery = delivery.NewBot(gw, store.NewGroupStore(db), c.Techs, c.GCfg)
+
+	cb, err := buildWeComCallback(cfg, c.Delivery)
+	if err != nil {
+		_ = db.Close()
+		return err
+	}
 
 	c.HTTP = httpapi.NewServer(httpapi.ServerDeps{
 		Config:        cfg,
@@ -84,50 +94,46 @@ func (c *Container) Initialize(cfgPath string) error {
 		GlobalCfg:     c.GCfg,
 		WeComGateway:  gw,
 		WeComCallback: cb,
+		Delivery:      c.Delivery,
 	})
 	return nil
 }
 
-func buildWeCom(cfg *config.Config) (wecom.Gateway, http.Handler, error) {
-	var (
-		gw wecom.Gateway
-		cb http.Handler
-	)
-
-	// Gateway：默认假网关；显式关闭 use_fake 且 secret 齐备时用真客户端
+func buildWeComGateway(cfg *config.Config) (wecom.Gateway, error) {
 	if cfg.WeCom.UseFakeGateway || !cfg.WeCom.ClientEnabled() {
-		gw = wecom.NewFakeGateway()
 		if !cfg.WeCom.ClientEnabled() {
 			log.Printf("wecom: using FakeGateway (corp secret not configured or use_fake_gateway=true)")
 		} else {
 			log.Printf("wecom: using FakeGateway (use_fake_gateway=true)")
 		}
-	} else {
-		client, err := wecom.NewClient(wecom.ClientConfig{
-			CorpID:     cfg.WeCom.CorpID,
-			CorpSecret: cfg.WeCom.CorpSecret,
-			AgentID:    cfg.WeCom.AgentID,
-		})
-		if err != nil {
-			return nil, nil, fmt.Errorf("wecom client: %w", err)
-		}
-		gw = client
-		log.Printf("wecom: using real Client gateway")
+		return wecom.NewFakeGateway(), nil
 	}
+	client, err := wecom.NewClient(wecom.ClientConfig{
+		CorpID:     cfg.WeCom.CorpID,
+		CorpSecret: cfg.WeCom.CorpSecret,
+		AgentID:    cfg.WeCom.AgentID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("wecom client: %w", err)
+	}
+	log.Printf("wecom: using real Client gateway")
+	return client, nil
+}
 
-	if cfg.WeCom.CallbackEnabled() {
-		crypt, err := wecom.NewCrypt(cfg.WeCom.Token, cfg.WeCom.EncodingAESKey, cfg.WeCom.CorpID)
-		if err != nil {
-			return nil, nil, fmt.Errorf("wecom crypt: %w", err)
-		}
-		// 票 04：协议层默认 Nop，业务事件处理在 05 DeliveryBot 接入
-		cb = wecom.NewCallbackServer(crypt, wecom.NopCallbackHandler{})
-		log.Printf("wecom: callback enabled at %s", cfg.WeCom.CallbackPath)
-	} else {
+func buildWeComCallback(cfg *config.Config, handler wecom.CallbackHandler) (http.Handler, error) {
+	if !cfg.WeCom.CallbackEnabled() {
 		log.Printf("wecom: callback disabled (missing corp_id/token/encoding_aes_key)")
+		return nil, nil
 	}
-
-	return gw, cb, nil
+	crypt, err := wecom.NewCrypt(cfg.WeCom.Token, cfg.WeCom.EncodingAESKey, cfg.WeCom.CorpID)
+	if err != nil {
+		return nil, fmt.Errorf("wecom crypt: %w", err)
+	}
+	if handler == nil {
+		handler = wecom.NopCallbackHandler{}
+	}
+	log.Printf("wecom: callback enabled at %s (DeliveryBot wired)", cfg.WeCom.CallbackPath)
+	return wecom.NewCallbackServer(crypt, handler), nil
 }
 
 func (c *Container) Close() error {

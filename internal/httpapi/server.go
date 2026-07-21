@@ -14,6 +14,7 @@ import (
 
 	"github.com/clxstart/qiwei-zhushou/internal/auth"
 	"github.com/clxstart/qiwei-zhushou/internal/config"
+	"github.com/clxstart/qiwei-zhushou/internal/delivery"
 	"github.com/clxstart/qiwei-zhushou/internal/globalcfg"
 	"github.com/clxstart/qiwei-zhushou/internal/tech"
 	"github.com/clxstart/qiwei-zhushou/internal/wecom"
@@ -26,40 +27,43 @@ type HealthPinger interface {
 
 // Server HTTP API + 静态托管 + 管理员会话。
 type Server struct {
-	cfg     *config.Config
-	authn   *auth.Authenticator
-	sess    *auth.SessionManager
-	pinger  HealthPinger
-	techs   *tech.Service
-	gcfg    *globalcfg.Service
-	wecomGW wecom.Gateway
-	wecomCB http.Handler
-	mux     *http.ServeMux
+	cfg      *config.Config
+	authn    *auth.Authenticator
+	sess     *auth.SessionManager
+	pinger   HealthPinger
+	techs    *tech.Service
+	gcfg     *globalcfg.Service
+	delivery *delivery.Bot
+	wecomGW  wecom.Gateway
+	wecomCB  http.Handler
+	mux      *http.ServeMux
 }
 
 // ServerDeps 装配依赖，避免构造参数继续膨胀。
 type ServerDeps struct {
-	Config       *config.Config
-	Authn        *auth.Authenticator
-	Sess         *auth.SessionManager
-	Pinger       HealthPinger
-	Techs        *tech.Service
-	GlobalCfg    *globalcfg.Service
-	WeComGateway wecom.Gateway
+	Config        *config.Config
+	Authn         *auth.Authenticator
+	Sess          *auth.SessionManager
+	Pinger        HealthPinger
+	Techs         *tech.Service
+	GlobalCfg     *globalcfg.Service
+	Delivery      *delivery.Bot
+	WeComGateway  wecom.Gateway
 	WeComCallback http.Handler
 }
 
 func NewServer(deps ServerDeps) *Server {
 	s := &Server{
-		cfg:     deps.Config,
-		authn:   deps.Authn,
-		sess:    deps.Sess,
-		pinger:  deps.Pinger,
-		techs:   deps.Techs,
-		gcfg:    deps.GlobalCfg,
-		wecomGW: deps.WeComGateway,
-		wecomCB: deps.WeComCallback,
-		mux:     http.NewServeMux(),
+		cfg:      deps.Config,
+		authn:    deps.Authn,
+		sess:     deps.Sess,
+		pinger:   deps.Pinger,
+		techs:    deps.Techs,
+		gcfg:     deps.GlobalCfg,
+		delivery: deps.Delivery,
+		wecomGW:  deps.WeComGateway,
+		wecomCB:  deps.WeComCallback,
+		mux:      http.NewServeMux(),
 	}
 	s.routes()
 	return s
@@ -76,6 +80,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/admin/me", s.requireAdmin(s.handleMe))
 	s.registerTechRoutes()
 	s.registerGlobalConfigRoutes()
+	s.registerDeliveryRoutes()
 	s.registerWeComRoutes()
 
 	// 静态资源（管理壳）

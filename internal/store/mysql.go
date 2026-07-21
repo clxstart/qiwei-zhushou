@@ -91,6 +91,20 @@ func (d *DB) Migrate(ctx context.Context) error {
 			payment_qr_path VARCHAR(512) NOT NULL DEFAULT '',
 			updated_at BIGINT NOT NULL
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`CREATE TABLE IF NOT EXISTS group_chats (
+			chat_id VARCHAR(64) PRIMARY KEY,
+			name VARCHAR(255) NOT NULL DEFAULT '',
+			creator_userid VARCHAR(64) NOT NULL DEFAULT '',
+			is_external TINYINT(1) NOT NULL DEFAULT 0,
+			members_json MEDIUMTEXT NOT NULL,
+			selected_tech_userid VARCHAR(64) NOT NULL DEFAULT '',
+			selected_tech_name VARCHAR(64) NOT NULL DEFAULT '',
+			selected_tech_tag VARCHAR(64) NOT NULL DEFAULT '',
+			steps_json MEDIUMTEXT NOT NULL,
+			created_at BIGINT NOT NULL,
+			updated_at BIGINT NOT NULL,
+			INDEX idx_group_chats_updated (updated_at)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 	}
 	for _, stmt := range stmts {
 		if _, err := d.SQL.ExecContext(ctx, stmt); err != nil {
