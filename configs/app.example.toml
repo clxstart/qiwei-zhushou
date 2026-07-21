@@ -21,3 +21,14 @@ cookie_secure = false
 
 [static]
 dir = "web/dist"
+
+# 企业微信自建应用（可选；本地开发可先用假网关）
+[wecom]
+corp_id = ""
+corp_secret = ""
+agent_id = 0
+token = ""
+encoding_aes_key = ""
+callback_path = "/wecom/callback"
+# true：不调用真企微 API，注入 FakeGateway（推荐开发/单测）
+use_fake_gateway = true

@@ -29,7 +29,7 @@ func testServer(t *testing.T) *Server {
 		Password: cfg.Admin.Password,
 	})
 	sess := auth.NewSessionManager(auth.NewMemorySessionStore(), time.Hour)
-	return NewServer(cfg, authn, sess, nil, nil, nil)
+	return NewServer(ServerDeps{Config: cfg, Authn: authn, Sess: sess})
 }
 
 func TestHealth(t *testing.T) {

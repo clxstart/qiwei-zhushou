@@ -30,7 +30,7 @@ func techTestServer(t *testing.T) (*Server, *http.Cookie) {
 	})
 	sess := auth.NewSessionManager(auth.NewMemorySessionStore(), time.Hour)
 	techSvc := tech.NewService(tech.NewMemoryStore())
-	s := NewServer(cfg, authn, sess, nil, techSvc, nil)
+	s := NewServer(ServerDeps{Config: cfg, Authn: authn, Sess: sess, Techs: techSvc})
 
 	// login
 	rr := httptest.NewRecorder()

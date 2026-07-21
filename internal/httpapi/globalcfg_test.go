@@ -33,7 +33,7 @@ func globalCfgTestServer(t *testing.T) (*Server, *http.Cookie) {
 	sess := auth.NewSessionManager(auth.NewMemorySessionStore(), time.Hour)
 	techSvc := tech.NewService(tech.NewMemoryStore())
 	gcfgSvc := globalcfg.NewService(globalcfg.NewMemoryStore(), globalcfg.NewMemoryAssetStore())
-	s := NewServer(cfg, authn, sess, nil, techSvc, gcfgSvc)
+	s := NewServer(ServerDeps{Config: cfg, Authn: authn, Sess: sess, Techs: techSvc, GlobalCfg: gcfgSvc})
 
 	rr := httptest.NewRecorder()
 	body, _ := json.Marshal(map[string]string{"username": "admin", "password": "pass"})
