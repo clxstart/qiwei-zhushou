@@ -62,6 +62,10 @@ go run ./cmd/server -config configs/app.toml
 | POST | `/api/v1/admin/groups/{chat_id}/send-code` | 管理员代发尾款码 |
 | POST | `/api/v1/staff/groups/{chat_id}/settle` | 拉群人结清 |
 | POST | `/api/v1/admin/groups/{chat_id}/settle` | 管理员代结清 |
+| POST | `/api/v1/admin/groups/{chat_id}/reverse-settle` | 管理员反结清 |
+| POST | `/api/v1/admin/groups/{chat_id}/replay-step` | 补发流水线某步 `{"step":"..."}` |
+| GET | `/api/v1/admin/op-logs` | 最近操作日志 |
+| GET | `/api/v1/admin/groups/{chat_id}/op-logs` | 某群操作日志 |
 | — | `/h5/payment?chat_id=` | 录入金额 H5 壳 |
 
 

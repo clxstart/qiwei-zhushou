@@ -42,6 +42,7 @@ type Bot struct {
 	gw      wecom.Gateway
 	groups  GroupStore
 	ledgers LedgerStore
+	oplogs  OpLogStore
 	techs   *tech.Service
 	gcfg    *globalcfg.Service
 	clock   Clock
@@ -57,12 +58,21 @@ func NewBot(gw wecom.Gateway, groups GroupStore, ledgers LedgerStore, techs *tec
 		gw:      gw,
 		groups:  groups,
 		ledgers: ledgers,
+		oplogs:  NewMemoryOpLogStore(),
 		techs:   techs,
 		gcfg:    gcfg,
 		clock:   realClock{},
 		rand:    stdRandom{},
 		logger:  log.Default(),
 	}
+}
+
+// WithOpLogs 注入操作日志存储（生产用 MySQL）。
+func (b *Bot) WithOpLogs(s OpLogStore) *Bot {
+	if s != nil {
+		b.oplogs = s
+	}
+	return b
 }
 
 func (b *Bot) WithClock(c Clock) *Bot   { b.clock = c; return b }

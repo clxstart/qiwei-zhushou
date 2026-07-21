@@ -82,6 +82,7 @@ func (s *Server) routes() {
 	s.registerGlobalConfigRoutes()
 	s.registerDeliveryRoutes()
 	s.registerPaymentRoutes()
+	s.registerAdminOpsRoutes()
 	s.registerWeComRoutes()
 
 	// 静态资源（管理壳 + H5）

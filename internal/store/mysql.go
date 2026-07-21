@@ -116,6 +116,17 @@ func (d *DB) Migrate(ctx context.Context) error {
 			updated_at BIGINT NOT NULL,
 			INDEX idx_group_ledgers_status (status)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`CREATE TABLE IF NOT EXISTS op_logs (
+			id BIGINT PRIMARY KEY AUTO_INCREMENT,
+			actor VARCHAR(64) NOT NULL DEFAULT '',
+			action VARCHAR(64) NOT NULL,
+			chat_id VARCHAR(64) NOT NULL DEFAULT '',
+			summary VARCHAR(512) NOT NULL DEFAULT '',
+			result VARCHAR(255) NOT NULL DEFAULT '',
+			created_at BIGINT NOT NULL,
+			INDEX idx_op_logs_chat (chat_id, id),
+			INDEX idx_op_logs_action (action)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 	}
 	for _, stmt := range stmts {
 		if _, err := d.SQL.ExecContext(ctx, stmt); err != nil {
