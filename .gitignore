@@ -2,10 +2,16 @@
 .env.*
 !.env.example
 node_modules/
-dist/
+# 保留管理壳静态产物 web/dist（V1 由仓库直接托管）
 build/
+bin/
+*.exe
 .DS_Store
 Thumbs.db
 *.log
 .idea/
 .vscode/
+configs/app.toml
+configs/app.local.toml
+.scratch/**/tmp/
+

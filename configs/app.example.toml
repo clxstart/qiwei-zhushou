@@ -1,0 +1,23 @@
+# 复制为 configs/app.toml 后按环境修改。
+# 敏感项也可通过环境变量覆盖：MYSQL_DSN / ADMIN_USERNAME / ADMIN_PASSWORD / SESSION_SECRET / SERVER_ADDR
+
+[server]
+addr = ":8080"
+
+[mysql]
+# 示例 DSN（请改成真实库）
+dsn = "qw:qw_pass@tcp(127.0.0.1:3306)/qiwei_zhushou?parseTime=true&charset=utf8mb4&loc=Local"
+
+[admin]
+username = "admin"
+password = "change-me"
+
+[session]
+cookie_name = "qw_admin_session"
+# 至少 16 字符；生产请用强随机串
+secret = "change-me-to-a-long-secret"
+ttl_seconds = 86400
+cookie_secure = false
+
+[static]
+dir = "web/dist"
