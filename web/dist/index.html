@@ -379,14 +379,39 @@
       if (name === 'ledger') loadLedgerPage();
     }
 
+    function formatHealth(h) {
+      if (!h) return '未知';
+      const svc = h.ok ? '服务正常' : '服务异常';
+      let db = '数据库未检查';
+      if (h.db === 'up') db = '数据库已连接';
+      else if (h.db === 'down') db = '数据库断开';
+      else if (h.db) db = '数据库：' + h.db;
+      return svc + ' · ' + db;
+    }
+
+    function ledgerStatusText(status) {
+      const map = {
+        unbooked: '未入账',
+        booked: '已入账待发码',
+        code_sent: '已发码待结清',
+        settled: '已结清',
+      };
+      return map[status] || status || '未知';
+    }
+
+    function yuan(n) {
+      const v = Number(n || 0);
+      return v.toLocaleString('zh-CN') + ' 元';
+    }
+
     async function loadHomeSummary() {
       try {
         const s = await api('/api/v1/admin/summary');
         document.getElementById('home-summary').innerHTML =
-          '今日收入：' + s.today_income +
-          ' · 本月收入：' + s.month_income +
-          ' · 未结清：' + s.unsettled_count +
-          ' · 已结清：' + s.settled_count +
+          '今日收入：' + yuan(s.today_income) +
+          ' · 本月收入：' + yuan(s.month_income) +
+          ' · 未结清：' + s.unsettled_count + ' 单' +
+          ' · 已结清：' + s.settled_count + ' 单' +
           ' · 群数：' + s.group_count;
       } catch (e) {
         document.getElementById('home-summary').textContent = e.message || '汇总失败';
@@ -402,11 +427,11 @@
           api('/api/v1/admin/groups'),
         ]);
         document.getElementById('ledger-summary').innerHTML =
-          '今日收入 <strong>' + sum.today_income + '</strong>　' +
-          '本月收入 <strong>' + sum.month_income + '</strong>　' +
-          '未结清 <strong>' + sum.unsettled_count + '</strong>　' +
-          '已结清 <strong>' + sum.settled_count + '</strong>　' +
-          '入账总额 <strong>' + sum.total_booked_amount + '</strong>';
+          '今日收入 <strong>' + yuan(sum.today_income) + '</strong>　' +
+          '本月收入 <strong>' + yuan(sum.month_income) + '</strong>　' +
+          '未结清 <strong>' + sum.unsettled_count + '</strong> 单　' +
+          '已结清 <strong>' + sum.settled_count + '</strong> 单　' +
+          '入账总额 <strong>' + yuan(sum.total_booked_amount) + '</strong>';
         const items = list.items || [];
         if (!items.length) {
           tbody.innerHTML = '<tr><td colspan="8" class="sub">暂无群记录</td></tr>';
@@ -415,11 +440,11 @@
         tbody.innerHTML = items.map((o) => `
           <tr>
             <td>${esc(o.name || o.chat_id)}<div class="sub" style="margin:4px 0 0"><code>${esc(o.chat_id)}</code></div></td>
-            <td>${esc(o.ledger_status)}</td>
-            <td>${o.deposit || 0}</td>
-            <td>${o.total || 0}</td>
-            <td>${o.tail || 0}</td>
-            <td>${o.code_sent ? '是(' + (o.code_sent_count || 0) + ')' : '否'}</td>
+            <td>${esc(ledgerStatusText(o.ledger_status))}</td>
+            <td>${yuan(o.deposit)}</td>
+            <td>${yuan(o.total)}</td>
+            <td>${yuan(o.tail)}</td>
+            <td>${o.code_sent ? ('是（' + (o.code_sent_count || 0) + ' 次）') : '否'}</td>
             <td>${o.settled ? '是' : '否'}</td>
             <td><button type="button" class="secondary small" data-detail="${esc(o.chat_id)}">详情</button></td>
           </tr>
@@ -438,9 +463,69 @@
       el.textContent = '加载中…';
       try {
         const d = await api('/api/v1/admin/groups/' + encodeURIComponent(chatId) + '/detail');
-        el.textContent = JSON.stringify(d, null, 2);
+        const g = d.group || {};
+        const led = d.ledger || {};
+        const logs = d.op_logs || [];
+        const members = (g.members || []).map((m) =>
+          `- ${m.name || m.userid}（${m.type === 2 ? '外部' : '内部'} · ${m.userid || ''}）`
+        ).join('\n') || '无';
+        const steps = (g.steps || []).map((s) =>
+          `- ${s.name}：${stepStatusText(s.status)}${s.error ? '（' + s.error + '）' : ''}`
+        ).join('\n') || '无';
+        const logLines = logs.map((l) =>
+          `- [${formatTime(l.created_at)}] ${l.actor || '-'} / ${actionText(l.action)} / ${l.result || '-'}${l.summary ? ' · ' + l.summary : ''}`
+        ).join('\n') || '无';
+        el.textContent =
+          '【群信息】\n' +
+          '群名：' + (g.name || '-') + '\n' +
+          '群ID：' + (g.chat_id || chatId) + '\n' +
+          '拉群人：' + (g.creator_userid || '-') + '\n' +
+          '技术：' + (g.selected_tech_name || '待分配') + '\n' +
+          '外部客户群：' + (g.is_external ? '是' : '否') + '\n\n' +
+          '【账务】\n' +
+          '状态：' + ledgerStatusText(led.status) + '\n' +
+          '定金：' + yuan(led.deposit) + '\n' +
+          '总价：' + yuan(led.total) + '\n' +
+          '尾款：' + yuan(led.tail) + '\n' +
+          '发码次数：' + (led.code_sent_count || 0) + '\n\n' +
+          '【成员】\n' + members + '\n\n' +
+          '【流水线步骤】\n' + steps + '\n\n' +
+          '【最近操作日志】\n' + logLines;
       } catch (err) {
         el.textContent = err.message || '加载失败';
+      }
+    }
+
+    function stepStatusText(status) {
+      const map = {
+        pending: '待执行',
+        done: '已完成',
+        skipped: '已跳过',
+        failed: '失败',
+      };
+      return map[status] || status || '未知';
+    }
+
+    function actionText(action) {
+      const map = {
+        record_payment: '入账',
+        send_code: '发尾款码',
+        settle: '结清',
+        reverse_settle: '反结清',
+        replay_step: '补发步骤',
+        admin_payment: '管理员入账',
+        admin_send_code: '管理员发码',
+        admin_settle: '管理员结清',
+      };
+      return map[action] || action || '-';
+    }
+
+    function formatTime(t) {
+      if (!t) return '-';
+      try {
+        return new Date(t).toLocaleString('zh-CN', { hour12: false });
+      } catch {
+        return String(t);
       }
     }
 
@@ -455,7 +540,7 @@
         loginView.classList.add('hidden');
         appView.classList.remove('hidden');
         const h = await api('/api/v1/health');
-        healthEl.textContent = h.ok ? `ok db=${h.db || 'n/a'}` : JSON.stringify(h);
+        healthEl.textContent = formatHealth(h);
         return true;
       } catch {
         loginView.classList.remove('hidden');
