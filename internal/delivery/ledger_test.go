@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/clxstart/qiwei-zhushou/internal/globalcfg"
 	"github.com/clxstart/qiwei-zhushou/internal/wecom"
 )
 
@@ -154,12 +155,82 @@ func TestSendTailPaymentCode(t *testing.T) {
 		}
 	}
 
-	// 结清后拒绝
-	if err := bot.MarkSettledForTest(ctx, "c3"); err != nil {
+	// 结清后拒绝发码
+	if _, err := bot.Settle(ctx, "c3", Actor{UserID: "creator1"}); err != nil {
 		t.Fatal(err)
 	}
 	_, err = bot.SendTailPaymentCode(ctx, "c3", Actor{UserID: "creator1"})
 	if !errors.Is(err, ErrLedgerSettled) {
 		t.Fatalf("want settled, got %v", err)
+	}
+}
+
+func TestSettle(t *testing.T) {
+	bot, gw, _, gcfgSvc := setupBot(t)
+	ctx := context.Background()
+	seedGroup(t, bot, gw, "c4", "creator1")
+	_, _ = gcfgSvc.SavePaymentQR(ctx, "code.png", []byte{0x89, 0x50, 0x4E, 0x47, 1, 2, 3})
+	_, _ = gcfgSvc.Update(ctx, globalcfg.UpdateInput{
+		DeliveryNotice: "n", BizFlowText: "f", BizFeatureText: "fe", BizExtendText: "e",
+		GroupNameSuffix: "｜测", EmergencyContact: "e", TriggerScope: globalcfg.ScopeExternalOnly,
+		TplRoleAnnouncement: "r", TplTechIntro: "t", TplPaymentCode: "付{tail}",
+		TplSettleNotice: "已结清 总价{amount} 尾款{tail}",
+	})
+
+	// 未入账
+	_, err := bot.Settle(ctx, "c4", Actor{UserID: "creator1"})
+	if !errors.Is(err, ErrNotBooked) {
+		t.Fatalf("not booked: %v", err)
+	}
+
+	_, err = bot.RecordPayment(ctx, "c4", Actor{UserID: "creator1"}, 2000, 10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 未发码
+	_, err = bot.Settle(ctx, "c4", Actor{UserID: "creator1"})
+	if !errors.Is(err, ErrCodeNotSent) {
+		t.Fatalf("code not sent: %v", err)
+	}
+
+	if _, err := bot.SendTailPaymentCode(ctx, "c4", Actor{UserID: "creator1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 非拉群人
+	_, err = bot.Settle(ctx, "c4", Actor{UserID: "other"})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("forbidden: %v", err)
+	}
+
+	beforeSends := len(filterMethod(gw.Snapshot(), "SendText"))
+	led, err := bot.Settle(ctx, "c4", Actor{UserID: "creator1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if led.Status != LedgerSettled {
+		t.Fatalf("status=%s", led.Status)
+	}
+	afterSends := filterMethod(gw.Snapshot(), "SendText")
+	if len(afterSends) <= beforeSends {
+		t.Fatal("expected settle notice send")
+	}
+	last := afterSends[len(afterSends)-1].Summary
+	if !contains(last, "10000") || !contains(last, "8000") {
+		t.Fatalf("settle notice=%q", last)
+	}
+
+	// 结清后再入账/发码/结清
+	_, err = bot.RecordPayment(ctx, "c4", Actor{UserID: "creator1"}, 1, 2)
+	if !errors.Is(err, ErrLedgerSettled) {
+		t.Fatalf("record after settle: %v", err)
+	}
+	_, err = bot.SendTailPaymentCode(ctx, "c4", Actor{UserID: "creator1"})
+	if !errors.Is(err, ErrLedgerSettled) {
+		t.Fatalf("send after settle: %v", err)
+	}
+	_, err = bot.Settle(ctx, "c4", Actor{UserID: "creator1"})
+	if !errors.Is(err, ErrLedgerSettled) {
+		t.Fatalf("re-settle: %v", err)
 	}
 }

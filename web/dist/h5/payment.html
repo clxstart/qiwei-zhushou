@@ -72,6 +72,7 @@
       <input id="total" type="number" min="1" step="1" required />
       <button type="submit">提交入账</button>
       <button type="button" id="send-code" style="margin-top:10px;background:#0d9488">发尾款码到群</button>
+      <button type="button" id="settle" style="margin-top:10px;background:#047857">确认结清</button>
     </form>
   </div>
   <script>
@@ -170,6 +171,28 @@
         showLedger(data);
       } catch (err) {
         errEl.textContent = err.message || '发码失败';
+      }
+    });
+
+    document.getElementById('settle').addEventListener('click', async () => {
+      errEl.textContent = '';
+      okEl.textContent = '';
+      if (!chatId) {
+        errEl.textContent = '缺少 chat_id';
+        return;
+      }
+      if (!confirm('确认已收到客户款项并结清？')) return;
+      try {
+        const res = await fetch('/api/v1/staff/groups/' + encodeURIComponent(chatId) + '/settle', {
+          method: 'POST',
+          headers: { 'X-WeCom-UserID': useridInput.value.trim() },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        okEl.textContent = '已结清，群内已通知';
+        showLedger(data);
+      } catch (err) {
+        errEl.textContent = err.message || '结清失败';
       }
     });
   </script>

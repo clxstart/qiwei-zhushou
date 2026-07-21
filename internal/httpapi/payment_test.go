@@ -125,4 +125,26 @@ func TestStaffPayment_HTTP(t *testing.T) {
 	if led.CodeSentCount != 1 || led.Status != delivery.LedgerCodeSent {
 		t.Fatalf("after send %+v", led)
 	}
+
+	// settle
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/staff/groups/chat1/settle", nil)
+	req.Header.Set("X-WeCom-UserID", "creator1")
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("settle: %d %s", rr.Code, rr.Body.String())
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &led)
+	if led.Status != delivery.LedgerSettled {
+		t.Fatalf("settled %+v", led)
+	}
+
+	// re-settle conflict
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/staff/groups/chat1/settle", nil)
+	req.Header.Set("X-WeCom-UserID", "creator1")
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("re-settle: %d", rr.Code)
+	}
 }

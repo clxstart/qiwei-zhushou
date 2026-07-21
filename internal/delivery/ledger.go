@@ -25,6 +25,7 @@ var (
 	ErrLedgerNotFound = errors.New("ledger not found")
 	ErrNotBooked      = errors.New("ledger not booked: record payment first")
 	ErrNoPaymentQR    = errors.New("payment qr not configured")
+	ErrCodeNotSent    = errors.New("tail payment code not sent yet")
 )
 
 // Ledger 一群一账。
@@ -232,13 +233,54 @@ func (b *Bot) SendTailPaymentCode(ctx context.Context, chatID string, actor Acto
 	return led, nil
 }
 
-// MarkSettledForTest 测试桩：将账本置为已结清（票 08 前用于断言发码拒绝）。
-func (b *Bot) MarkSettledForTest(ctx context.Context, chatID string) error {
+// Settle 确认结清：须已发码≥1 且未结清；回群通知；之后拉群人只读。
+func (b *Bot) Settle(ctx context.Context, chatID string, actor Actor) (*Ledger, error) {
+	g, err := b.groups.GetByChatID(ctx, chatID)
+	if err != nil {
+		return nil, err
+	}
+	if !actor.IsAdmin && actor.UserID != g.CreatorUserID {
+		return nil, ErrForbidden
+	}
+
 	led, err := b.ledgers.Get(ctx, chatID)
 	if err != nil {
-		return err
+		if errors.Is(err, ErrLedgerNotFound) {
+			return nil, ErrNotBooked
+		}
+		return nil, err
 	}
+	if led.Status == LedgerSettled {
+		return nil, ErrLedgerSettled
+	}
+	if led.CodeSentCount < 1 {
+		return nil, ErrCodeNotSent
+	}
+
+	cfg, err := b.gcfg.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	text := strings.TrimSpace(cfg.TplSettleNotice)
+	if text == "" {
+		text = "【结清通知】\n本单尾款已确认结清，感谢配合。"
+	}
+	text = Render(text, map[string]string{
+		"{tail}":       fmt.Sprintf("%d", led.Tail),
+		"{amount}":     fmt.Sprintf("%d", led.Total),
+		"{tech_name}":  g.SelectedTechName,
+		"{group_name}": g.Name,
+		"{boss_list}":  "",
+		"{emergency}":  cfg.EmergencyContact,
+	})
+	if err := b.gw.SendText(ctx, chatID, text, nil); err != nil {
+		return nil, fmt.Errorf("send settle notice: %w", err)
+	}
+
 	led.Status = LedgerSettled
 	led.UpdatedAt = b.clock.Now()
-	return b.ledgers.Save(ctx, led)
+	if err := b.ledgers.Save(ctx, led); err != nil {
+		return nil, err
+	}
+	return led, nil
 }

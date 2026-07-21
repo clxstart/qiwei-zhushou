@@ -14,11 +14,13 @@ func (s *Server) registerPaymentRoutes() {
 	s.mux.HandleFunc("GET /api/v1/staff/groups/{chat_id}/ledger", s.handleStaffGetLedger)
 	s.mux.HandleFunc("POST /api/v1/staff/groups/{chat_id}/payment", s.handleStaffRecordPayment)
 	s.mux.HandleFunc("POST /api/v1/staff/groups/{chat_id}/send-code", s.handleStaffSendCode)
+	s.mux.HandleFunc("POST /api/v1/staff/groups/{chat_id}/settle", s.handleStaffSettle)
 
-	// 管理员代录入 / 代发码
+	// 管理员代录入 / 代发码 / 代结清
 	s.mux.HandleFunc("POST /api/v1/admin/groups/{chat_id}/payment", s.requireAdmin(s.handleAdminRecordPayment))
 	s.mux.HandleFunc("GET /api/v1/admin/groups/{chat_id}/ledger", s.requireAdmin(s.handleAdminGetLedger))
 	s.mux.HandleFunc("POST /api/v1/admin/groups/{chat_id}/send-code", s.requireAdmin(s.handleAdminSendCode))
+	s.mux.HandleFunc("POST /api/v1/admin/groups/{chat_id}/settle", s.requireAdmin(s.handleAdminSettle))
 }
 
 type paymentBody struct {
@@ -156,6 +158,39 @@ func (s *Server) handleAdminSendCode(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, led)
 }
 
+func (s *Server) handleStaffSettle(w http.ResponseWriter, r *http.Request) {
+	if s.delivery == nil {
+		writeErr(w, http.StatusInternalServerError, "delivery bot unavailable")
+		return
+	}
+	actor, ok := s.staffActor(r)
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "missing wecom userid")
+		return
+	}
+	chatID := r.PathValue("chat_id")
+	led, err := s.delivery.Settle(r.Context(), chatID, actor)
+	if err != nil {
+		writePaymentErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, led)
+}
+
+func (s *Server) handleAdminSettle(w http.ResponseWriter, r *http.Request) {
+	if s.delivery == nil {
+		writeErr(w, http.StatusInternalServerError, "delivery bot unavailable")
+		return
+	}
+	chatID := r.PathValue("chat_id")
+	led, err := s.delivery.Settle(r.Context(), chatID, delivery.Actor{IsAdmin: true, UserID: "admin"})
+	if err != nil {
+		writePaymentErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, led)
+}
+
 func writePaymentErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, delivery.ErrForbidden):
@@ -168,6 +203,8 @@ func writePaymentErr(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusBadRequest, "record payment before sending code")
 	case errors.Is(err, delivery.ErrNoPaymentQR):
 		writeErr(w, http.StatusBadRequest, "payment qr not configured")
+	case errors.Is(err, delivery.ErrCodeNotSent):
+		writeErr(w, http.StatusBadRequest, "send tail payment code before settle")
 	case errors.Is(err, delivery.ErrGroupNotFound):
 		writeErr(w, http.StatusNotFound, "group not found")
 	case errors.Is(err, delivery.ErrLedgerNotFound):
