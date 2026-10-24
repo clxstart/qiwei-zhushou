@@ -75,6 +75,9 @@ export WECOM_GROUP_WEBHOOK=...
 # 1) 配置检查 + 取 token（可选 -chat 拉群详情）
 go run ./cmd/wecom-check -config configs/app.local.toml
 go run ./cmd/wecom-check -config configs/app.local.toml -chat wrxxxxxxxx
+# 有 group_webhook 后可探测发群（文本 / 再加 1x1 图）
+go run ./cmd/wecom-check -config configs/app.local.toml -send
+go run ./cmd/wecom-check -config configs/app.local.toml -send -send-image
 
 # 2) 启动服务
 go run ./cmd/server -config configs/app.local.toml
@@ -106,6 +109,7 @@ go run ./cmd/server -config configs/app.local.toml
 | 回调验证失败 | Token/AESKey 与后台不一致；或未走 HTTPS |
 | 群详情失败 | 无客户群权限 / chat_id 不是客户群 |
 | 流水线无发言 | `group_webhook` 空或机器人不在该群 |
+| Webhook 发图失败 | 群机器人只要原图 `base64`+`md5`；不要塞应用 `media_id` |
 | 仍走假网关 | `use_fake_gateway` 仍为 true，改 false 后重启 |
 
 ## 联调范围建议

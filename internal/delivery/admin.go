@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	ErrNotSettled     = errors.New("ledger is not settled")
-	ErrUnknownStep    = errors.New("unknown pipeline step")
+	ErrNotSettled        = errors.New("ledger is not settled")
+	ErrUnknownStep       = errors.New("unknown pipeline step")
 	ErrStepNotReplayable = errors.New("step already done or skipped; not replaying")
 )
 

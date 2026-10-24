@@ -28,6 +28,8 @@ dir = "web/dist"
 corp_id = ""
 corp_secret = ""
 agent_id = 0
+# true：只使用服务端主动调用企微 API，不启用回调和 OAuth 扫码登录
+outbound_only = true
 token = ""
 encoding_aes_key = ""
 callback_path = "/wecom/callback"
@@ -36,3 +38,7 @@ callback_path = "/wecom/callback"
 use_fake_gateway = false
 # 客户群发消息：群机器人 Webhook（外部客户群实用通道；自建应用无法直接往客户群自由发言）
 group_webhook = ""
+# 客户群列表轮询：0 关闭；至少 60 秒。首次成功扫描只建立基线，不触碰已有客户群。
+group_sync_interval_seconds = 60
+# 企微扫码登录回调地址（需与企微后台「网页授权」可信域名一致；留空则自动拼接当前域名）
+oauth_redirect_uri = ""

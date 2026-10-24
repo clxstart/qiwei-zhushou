@@ -3,6 +3,9 @@ package wecom
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,15 +30,18 @@ type ClientConfig struct {
 	DefaultGroupWebhook string
 	// ChatWebhooks chat_id -> webhook，优先于默认
 	ChatWebhooks map[string]string
-	HTTPClient   *http.Client
-	Logger       *log.Logger
-	MaxRetries   int
+	// WebhookResolver 动态按群解析 webhook（优先级高于 ChatWebhooks/DefaultGroupWebhook）。
+	// 返回空串表示未配置；resolver 出错时回退静态配置。
+	WebhookResolver func(chatID string) (string, error)
+	HTTPClient      *http.Client
+	Logger          *log.Logger
+	MaxRetries      int
 }
 
 // Client 真企微 Gateway：
 // - 客户群详情/改名：externalcontact/groupchat/*
 // - 客户群发消息：群机器人 Webhook（官方自建应用无法直接往外部客户群自由发消息）
-// - 素材上传：media/upload（发图前取 media_id；Webhook 发图用 base64 或 media 链路）
+// - 发图：Webhook 用图片二进制的 base64+md5（不走应用 media_id）；无 Webhook 时才 media/upload
 type Client struct {
 	cfg    ClientConfig
 	http   *http.Client
@@ -44,6 +50,9 @@ type Client struct {
 	mu          sync.Mutex
 	accessToken string
 	tokenExpiry time.Time
+
+	imagesMu sync.Mutex
+	images   map[string][]byte // UploadImage 在 webhook 模式下缓存的原图
 }
 
 func NewClient(cfg ClientConfig) (*Client, error) {
@@ -69,52 +78,75 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 }
 
 func (c *Client) webhookFor(chatID string) string {
+	if c.cfg.WebhookResolver != nil {
+		if u, err := c.cfg.WebhookResolver(chatID); err == nil && strings.TrimSpace(u) != "" {
+			return strings.TrimSpace(u)
+		}
+	}
 	if u, ok := c.cfg.ChatWebhooks[chatID]; ok && strings.TrimSpace(u) != "" {
 		return strings.TrimSpace(u)
 	}
 	return strings.TrimSpace(c.cfg.DefaultGroupWebhook)
 }
 
+func (c *Client) hasWebhook() bool {
+	if c.cfg.WebhookResolver != nil {
+		if u, err := c.cfg.WebhookResolver(""); err == nil && strings.TrimSpace(u) != "" {
+			return true
+		}
+	}
+	if strings.TrimSpace(c.cfg.DefaultGroupWebhook) != "" {
+		return true
+	}
+	for _, u := range c.cfg.ChatWebhooks {
+		if strings.TrimSpace(u) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Client) SendText(ctx context.Context, chatID, content string, mentionUserIDs []string) error {
-	// 客户群：Webhook 文本（@ 用 markdown 的 <@userid> 尽力表达）
 	wh := c.webhookFor(chatID)
 	if wh != "" {
-		text := content
-		if len(mentionUserIDs) > 0 {
-			var ats []string
-			for _, id := range mentionUserIDs {
-				if id = strings.TrimSpace(id); id != "" {
-					ats = append(ats, "<@"+id+">")
-				}
-			}
-			if len(ats) > 0 {
-				text = strings.Join(ats, " ") + "\n" + content
-			}
-		}
-		return c.sendWebhookMarkdown(ctx, wh, text)
+		return c.sendWebhookText(ctx, wh, content, mentionUserIDs)
 	}
 	// 无 webhook 时尝试应用群聊接口（仅内部群可能成功）
-	body := map[string]any{
+	text := map[string]any{"content": content}
+	if len(mentionUserIDs) > 0 {
+		text["mentioned_list"] = mentionUserIDs
+	}
+	return c.postJSON(ctx, "/cgi-bin/appchat/send", map[string]any{
 		"chatid":  chatID,
 		"msgtype": "text",
-		"text": map[string]any{
-			"content": content,
-		},
+		"text":    text,
+	}, nil)
+}
+
+// SendAppText 向企业成员发送应用消息（单聊）。走 /cgi-bin/message/send，需要 AgentID。
+func (c *Client) SendAppText(ctx context.Context, userID, content string) error {
+	if strings.TrimSpace(userID) == "" {
+		return fmt.Errorf("%w: userid required", ErrNotConfigured)
 	}
-	if len(mentionUserIDs) > 0 {
-		body["text"] = map[string]any{
-			"content":        content,
-			"mentioned_list": mentionUserIDs,
-		}
+	if c.cfg.AgentID == 0 {
+		return fmt.Errorf("%w: agent_id required for app message", ErrNotConfigured)
 	}
-	return c.postJSON(ctx, "/cgi-bin/appchat/send", body, nil)
+	return c.postJSON(ctx, "/cgi-bin/message/send", map[string]any{
+		"touser":  userID,
+		"msgtype": "text",
+		"agentid": c.cfg.AgentID,
+		"text":    map[string]any{"content": content},
+	}, nil)
 }
 
 func (c *Client) SendImage(ctx context.Context, chatID, mediaID string) error {
 	wh := c.webhookFor(chatID)
 	if wh != "" {
-		// Webhook 图片：优先 media_id
-		return c.sendWebhookImage(ctx, wh, mediaID)
+		data := c.imageBytes(mediaID)
+		if len(data) == 0 {
+			return fmt.Errorf("%w: webhook image bytes missing (call UploadImage in this process first)", ErrNotConfigured)
+		}
+		return c.sendWebhookImage(ctx, wh, data)
 	}
 	body := map[string]any{
 		"chatid":  chatID,
@@ -146,10 +178,11 @@ func (c *Client) RenameGroup(ctx context.Context, chatID, name string) error {
 func (c *Client) GetGroup(ctx context.Context, chatID string) (*GroupInfo, error) {
 	var resp struct {
 		GroupChat struct {
-			ChatID string `json:"chat_id"`
-			Name   string `json:"name"`
-			Owner  string `json:"owner"`
-			Member []struct {
+			ChatID     string `json:"chat_id"`
+			Name       string `json:"name"`
+			Owner      string `json:"owner"`
+			CreateTime int64  `json:"create_time"`
+			Member     []struct {
 				UserID string `json:"userid"`
 				Type   int    `json:"type"`
 				Name   string `json:"name"`
@@ -164,9 +197,10 @@ func (c *Client) GetGroup(ctx context.Context, chatID string) (*GroupInfo, error
 		return nil, err
 	}
 	info := &GroupInfo{
-		ChatID: resp.GroupChat.ChatID,
-		Name:   resp.GroupChat.Name,
-		Owner:  resp.GroupChat.Owner,
+		ChatID:     resp.GroupChat.ChatID,
+		Name:       resp.GroupChat.Name,
+		Owner:      resp.GroupChat.Owner,
+		CreateTime: resp.GroupChat.CreateTime,
 	}
 	if info.ChatID == "" {
 		info.ChatID = chatID
@@ -181,7 +215,199 @@ func (c *Client) GetGroup(ctx context.Context, chatID string) (*GroupInfo, error
 	return info, nil
 }
 
+func (c *Client) ListExternalGroupChats(ctx context.Context, cursor string) (ExternalGroupChatPage, error) {
+	var resp struct {
+		GroupChatList []struct {
+			ChatID string `json:"chat_id"`
+		} `json:"group_chat_list"`
+		NextCursor string `json:"next_cursor"`
+	}
+	body := map[string]any{
+		"status_filter": 0,
+		"limit":         1000,
+	}
+	if cursor = strings.TrimSpace(cursor); cursor != "" {
+		body["cursor"] = cursor
+	}
+	if err := c.postJSON(ctx, "/cgi-bin/externalcontact/groupchat/list", body, &resp); err != nil {
+		return ExternalGroupChatPage{}, err
+	}
+
+	page := ExternalGroupChatPage{NextCursor: strings.TrimSpace(resp.NextCursor)}
+	for _, item := range resp.GroupChatList {
+		if chatID := strings.TrimSpace(item.ChatID); chatID != "" {
+			page.ChatIDs = append(page.ChatIDs, chatID)
+		}
+	}
+	return page, nil
+}
+
+// ListPaymentBills 拉取对外收款流水。
+// 文档：https://developer.work.weixin.qq.com/document/path/93667
+func (c *Client) ListPaymentBills(ctx context.Context, beginTime, endTime int64, cursor string, limit int) (PaymentBillPage, error) {
+	if beginTime <= 0 || endTime <= beginTime {
+		return PaymentBillPage{}, fmt.Errorf("%w: invalid payment bill time window", ErrAPI)
+	}
+	if limit <= 0 || limit > 1000 {
+		limit = 1000
+	}
+	body := map[string]any{
+		"begin_time": beginTime,
+		"end_time":   endTime,
+		"limit":      limit,
+	}
+	if cursor = strings.TrimSpace(cursor); cursor != "" {
+		body["cursor"] = cursor
+	}
+	var resp struct {
+		NextCursor string `json:"next_cursor"`
+		BillList   []struct {
+			TransactionID  string `json:"transaction_id"`
+			BillType       int    `json:"bill_type"`
+			TradeState     int    `json:"trade_state"`
+			PayTime        int64  `json:"pay_time"`
+			OutTradeNo     string `json:"out_trade_no"`
+			OutRefundNo    string `json:"out_refund_no"`
+			ExternalUserID string `json:"external_userid"`
+			TotalFee       int64  `json:"total_fee"`
+			PayeeUserID    string `json:"payee_userid"`
+			PaymentType    int    `json:"payment_type"`
+			MchID          string `json:"mch_id"`
+			Remark         string `json:"remark"`
+			TotalRefundFee int64  `json:"total_refund_fee"`
+		} `json:"bill_list"`
+	}
+	if err := c.postJSON(ctx, "/cgi-bin/externalpay/get_bill_list", body, &resp); err != nil {
+		return PaymentBillPage{}, err
+	}
+	page := PaymentBillPage{NextCursor: strings.TrimSpace(resp.NextCursor)}
+	for _, b := range resp.BillList {
+		if strings.TrimSpace(b.TransactionID) == "" {
+			continue
+		}
+		page.Bills = append(page.Bills, PaymentBill{
+			TransactionID:  b.TransactionID,
+			BillType:       b.BillType,
+			TradeState:     b.TradeState,
+			PayTime:        b.PayTime,
+			OutTradeNo:     b.OutTradeNo,
+			OutRefundNo:    b.OutRefundNo,
+			ExternalUserID: b.ExternalUserID,
+			TotalFee:       b.TotalFee,
+			PayeeUserID:    b.PayeeUserID,
+			PaymentType:    b.PaymentType,
+			MchID:          b.MchID,
+			Remark:         b.Remark,
+			TotalRefundFee: b.TotalRefundFee,
+		})
+	}
+	return page, nil
+}
+
+// CreateGroupMsgTemplate 创建客户群群发任务。
+// 文档：https://developer.work.weixin.qq.com/document/path/92135
+// 注意：接口只创建任务，成员确认后才会真正发送。
+func (c *Client) CreateGroupMsgTemplate(ctx context.Context, req GroupMsgTemplateRequest) (GroupMsgTemplateResult, error) {
+	chatIDs := make([]string, 0, len(req.ChatIDs))
+	for _, id := range req.ChatIDs {
+		if id = strings.TrimSpace(id); id != "" {
+			chatIDs = append(chatIDs, id)
+		}
+	}
+	if len(chatIDs) == 0 {
+		return GroupMsgTemplateResult{}, fmt.Errorf("%w: chat_id_list is empty", ErrAPI)
+	}
+	if len(chatIDs) > 2000 {
+		chatIDs = chatIDs[:2000]
+	}
+	if strings.TrimSpace(req.Sender) == "" {
+		return GroupMsgTemplateResult{}, fmt.Errorf("%w: sender is required for group send", ErrAPI)
+	}
+	if strings.TrimSpace(req.Text) == "" {
+		return GroupMsgTemplateResult{}, fmt.Errorf("%w: text content is empty", ErrAPI)
+	}
+	body := map[string]any{
+		"chat_type":    "group",
+		"chat_id_list": chatIDs,
+		"sender":       strings.TrimSpace(req.Sender),
+		"allow_select": req.AllowSelect,
+		"text":         map[string]any{"content": req.Text},
+	}
+	var resp struct {
+		MsgID    string   `json:"msgid"`
+		FailList []string `json:"fail_list"`
+	}
+	if err := c.postJSON(ctx, "/cgi-bin/externalcontact/add_msg_template", body, &resp); err != nil {
+		return GroupMsgTemplateResult{}, err
+	}
+	return GroupMsgTemplateResult{
+		MsgID:    strings.TrimSpace(resp.MsgID),
+		FailList: resp.FailList,
+	}, nil
+}
+
+// GetGroupChatStatistic 按群主聚合的客户群统计。
+// 文档：https://developer.work.weixin.qq.com/document/path/92133
+func (c *Client) GetGroupChatStatistic(ctx context.Context, beginTime, endTime int64) (GroupChatStatisticResult, error) {
+	if beginTime <= 0 || endTime < beginTime {
+		return GroupChatStatisticResult{}, fmt.Errorf("%w: invalid statistic time window", ErrAPI)
+	}
+	// 企微限制单次跨度不超过 30 天
+	const maxSpan = int64(30 * 24 * 3600)
+	if endTime-beginTime > maxSpan {
+		endTime = beginTime + maxSpan
+	}
+	body := map[string]any{
+		"day_begin_time": beginTime,
+		"day_end_time":   endTime,
+		"order_by":       2, // 按群总数排序
+		"order_asc":      0,
+		"offset":         0,
+		"limit":          1000,
+	}
+	var resp struct {
+		Items []struct {
+			Owner string `json:"owner"`
+			Data  struct {
+				NewChatCnt   int64 `json:"new_chat_cnt"`
+				ChatTotal    int64 `json:"chat_total"`
+				ChatHasMsg   int64 `json:"chat_has_msg"`
+				NewMemberCnt int64 `json:"new_member_cnt"`
+				MemberTotal  int64 `json:"member_total"`
+				MemberHasMsg int64 `json:"member_has_msg"`
+				MsgTotal     int64 `json:"msg_total"`
+			} `json:"data"`
+		} `json:"items"`
+	}
+	if err := c.postJSON(ctx, "/cgi-bin/externalcontact/groupchat/statistic", body, &resp); err != nil {
+		return GroupChatStatisticResult{}, err
+	}
+	out := GroupChatStatisticResult{Items: make([]GroupChatStatisticItem, 0, len(resp.Items))}
+	for _, it := range resp.Items {
+		out.Items = append(out.Items, GroupChatStatisticItem{
+			Owner:        strings.TrimSpace(it.Owner),
+			NewChatCnt:   it.Data.NewChatCnt,
+			ChatTotal:    it.Data.ChatTotal,
+			ChatHasMsg:   it.Data.ChatHasMsg,
+			NewMemberCnt: it.Data.NewMemberCnt,
+			MemberTotal:  it.Data.MemberTotal,
+			MemberHasMsg: it.Data.MemberHasMsg,
+			MsgTotal:     it.Data.MsgTotal,
+		})
+	}
+	return out, nil
+}
+
 func (c *Client) UploadImage(ctx context.Context, filename string, data []byte) (string, error) {
+	if len(data) == 0 {
+		return "", fmt.Errorf("%w: empty image", ErrAPI)
+	}
+	// 群机器人发图只要本地字节；跳过 media/upload，避免未配可信 IP 时 60020。
+	if c.hasWebhook() {
+		id := webhookImageID(data)
+		c.rememberImage(id, data)
+		return id, nil
+	}
 	token, err := c.getToken(ctx)
 	if err != nil {
 		return "", err
@@ -225,6 +451,44 @@ func (c *Client) UploadImage(ctx context.Context, filename string, data []byte) 
 	return out.MediaID, nil
 }
 
+// GetUserInfoByCode 通过 OAuth2 code 换取企微用户身份（扫码登录）。
+// 调用 GET /cgi-bin/auth/getuserinfo?access_token=xxx&code=xxx，返回 UserID。
+func (c *Client) GetUserInfoByCode(ctx context.Context, code string) (userID string, err error) {
+	token, err := c.getToken(ctx)
+	if err != nil {
+		return "", err
+	}
+	u := fmt.Sprintf("%s/cgi-bin/auth/getuserinfo?access_token=%s&code=%s",
+		c.cfg.BaseURL, url.QueryEscape(token), url.QueryEscape(code))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return "", err
+	}
+	res, err := c.http.Do(req)
+	if err != nil {
+		c.logger.Printf("wecom getuserinfo request failed: %v", err)
+		return "", err
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(res.Body)
+	var out struct {
+		ErrCode int    `json:"errcode"`
+		ErrMsg  string `json:"errmsg"`
+		UserID  string `json:"userid"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", fmt.Errorf("%w: decode getuserinfo: %v", ErrAPI, err)
+	}
+	if out.ErrCode != 0 {
+		c.logger.Printf("wecom getuserinfo errcode=%d errmsg=%s", out.ErrCode, out.ErrMsg)
+		return "", fmt.Errorf("%w: getuserinfo %d %s", ErrAPI, out.ErrCode, out.ErrMsg)
+	}
+	if out.UserID == "" {
+		return "", fmt.Errorf("%w: getuserinfo returned empty userid", ErrAPI)
+	}
+	return out.UserID, nil
+}
+
 // PingToken 联调用：验证 corpid/secret 能否取 token。
 func (c *Client) PingToken(ctx context.Context) (string, error) {
 	tok, err := c.getToken(ctx)
@@ -237,31 +501,61 @@ func (c *Client) PingToken(ctx context.Context) (string, error) {
 	return "***", nil
 }
 
-func (c *Client) sendWebhookMarkdown(ctx context.Context, webhookURL, content string) error {
-	payload := map[string]any{
-		"msgtype": "markdown",
-		"markdown": map[string]string{
-			"content": content,
-		},
-	}
-	return c.postWebhook(ctx, webhookURL, payload)
+func webhookImageID(data []byte) string {
+	sum := md5.Sum(data)
+	return "whimg:" + hex.EncodeToString(sum[:])
 }
 
-func (c *Client) sendWebhookImage(ctx context.Context, webhookURL, mediaID string) error {
-	// 群机器人支持 image.md5+base64；media_id 路径因机器人类型而异。
-	// 这里用 text 兜底提示 media_id，优先尝试 image media_id 扩展字段。
+func (c *Client) rememberImage(id string, data []byte) {
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	c.imagesMu.Lock()
+	defer c.imagesMu.Unlock()
+	if c.images == nil {
+		c.images = map[string][]byte{}
+	}
+	c.images[id] = cp
+}
+
+func (c *Client) imageBytes(id string) []byte {
+	c.imagesMu.Lock()
+	defer c.imagesMu.Unlock()
+	return c.images[id]
+}
+
+func (c *Client) sendWebhookText(ctx context.Context, webhookURL, content string, mentionUserIDs []string) error {
+	text := map[string]any{"content": content}
+	if len(mentionUserIDs) > 0 {
+		var ids []string
+		for _, id := range mentionUserIDs {
+			if id = strings.TrimSpace(id); id != "" {
+				ids = append(ids, id)
+			}
+		}
+		if len(ids) > 0 {
+			text["mentioned_list"] = ids
+		}
+	}
+	return c.postWebhook(ctx, webhookURL, map[string]any{
+		"msgtype": "text",
+		"text":    text,
+	})
+}
+
+func (c *Client) sendWebhookImage(ctx context.Context, webhookURL string, data []byte) error {
+	const maxWebhookImage = 2 * 1024 * 1024
+	if len(data) > maxWebhookImage {
+		return fmt.Errorf("%w: webhook image exceeds 2MB", ErrAPI)
+	}
+	sum := md5.Sum(data)
 	payload := map[string]any{
 		"msgtype": "image",
 		"image": map[string]string{
-			"media_id": mediaID,
+			"base64": base64.StdEncoding.EncodeToString(data),
+			"md5":    hex.EncodeToString(sum[:]),
 		},
 	}
-	if err := c.postWebhook(ctx, webhookURL, payload); err != nil {
-		// 降级：发一条文字提示（避免整单失败）
-		c.logger.Printf("wecom webhook image failed, fallback text: %v", err)
-		return c.sendWebhookMarkdown(ctx, webhookURL, "【收款码图片】发送失败，请管理员在后台确认收款码素材。media_id="+mediaID)
-	}
-	return nil
+	return c.postWebhook(ctx, webhookURL, payload)
 }
 
 func (c *Client) postWebhook(ctx context.Context, webhookURL string, payload any) error {

@@ -146,6 +146,15 @@
         <input id="password" name="password" type="password" autocomplete="current-password" required />
         <button type="submit">登录</button>
       </form>
+      <div id="wecom-scan-section" class="hidden" style="margin-top:16px;border-top:1px solid var(--line);padding-top:16px">
+        <p class="sub" style="text-align:center;margin-bottom:12px">— 或使用企微扫码登录 —</p>
+        <div id="wecom-qr-container" style="display:flex;justify-content:center;min-height:200px">
+          <div id="wecom-qr-placeholder" style="display:flex;align-items:center;justify-content:center;width:200px;height:200px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:.85rem;text-align:center">
+            二维码加载中…
+          </div>
+        </div>
+        <p id="wecom-scan-err" class="err" style="text-align:center"></p>
+      </div>
     </div>
   </div>
 
@@ -155,8 +164,12 @@
       <div class="nav">
         <button type="button" class="secondary small active" data-page="home">首页</button>
         <button type="button" class="secondary small" data-page="ledger">总账</button>
+        <button type="button" class="secondary small" data-page="wecomgroups">客户群</button>
+        <button type="button" class="secondary small" data-page="stats">统计</button>
         <button type="button" class="secondary small" data-page="techs">技术花名册</button>
         <button type="button" class="secondary small" data-page="gcfg">全局配置</button>
+        <button type="button" class="secondary small" data-page="keywords">关键词回复</button>
+        <button type="button" class="secondary small" data-page="webhooks">Webhook 配置</button>
       </div>
       <div class="row">
         <span id="who" class="sub" style="margin:0"></span>
@@ -207,6 +220,134 @@
           <h2>群详情</h2>
           <p class="sub" id="ledger-detail-hint">点击列表「详情」查看成员、流水线与日志</p>
           <pre id="ledger-detail" style="white-space:pre-wrap;font-size:.85rem;margin:0;max-height:420px;overflow:auto"></pre>
+        </div>
+      </section>
+
+      <section id="page-stats" class="hidden">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:10px">
+            <h2 style="margin:0">技术与客户群</h2>
+            <div class="row">
+              <select id="st-tech-filter" style="margin:0;max-width:240px">
+                <option value="">全部技术</option>
+              </select>
+              <button type="button" class="secondary small" id="st-refresh">刷新</button>
+            </div>
+          </div>
+          <p id="st-err" class="err"></p>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>技术</th>
+                  <th>群名</th>
+                  <th>群 ID</th>
+                </tr>
+              </thead>
+              <tbody id="st-tbody">
+                <tr><td colspan="3" class="sub">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-wecomgroups" class="hidden">
+        <div class="card" style="margin-bottom:14px">
+          <div class="row" style="justify-content:space-between;margin-bottom:10px">
+            <h2 style="margin:0">客户群</h2>
+            <div class="row">
+              <button type="button" class="secondary small" id="wg-refresh">从企微刷新</button>
+            </div>
+          </div>
+          <p class="sub">数据来自企微客户群接口。群名只显示真实群名（未设置显示「未命名群」），成员为企微返回的真实成员。筛选支持群名、群 ID、成员名。</p>
+          <div class="row" style="margin-bottom:12px">
+            <input id="wg-search" placeholder="搜索群名 / 群 ID / 成员名" style="margin:0;max-width:320px" />
+            <select id="wg-tech-filter" style="margin:0;max-width:220px">
+              <option value="">全部技术</option>
+            </select>
+            <button type="button" class="secondary small" id="wg-filter">筛选</button>
+            <button type="button" class="secondary small" id="wg-clear">清空</button>
+          </div>
+          <p id="wg-err" class="err"></p>
+          <p id="wg-ok" class="ok"></p>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:36px"><input type="checkbox" id="wg-check-all" title="全选当前列表" /></th>
+                  <th>群（成员）</th>
+                  <th>群 ID</th>
+                  <th>人数</th>
+                  <th>技术</th>
+                  <th>账务</th>
+                  <th>群机器人</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="wg-tbody">
+                <tr><td colspan="8" class="sub">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:14px">
+          <h2>群发（企业群发）</h2>
+          <p class="sub">勾选上表要发的群 → 填发送成员和文案 → 创建群发任务。<strong>企微规定：任务创建后需该成员在企业微信客户端确认，消息才会真正发出。</strong></p>
+          <p id="wg-bc-err" class="err"></p>
+          <p id="wg-bc-ok" class="ok"></p>
+
+          <div class="card" style="background:#f9fafb;box-shadow:none;margin-bottom:14px">
+            <h2 style="font-size:1rem">发送范围（可选，默认关闭）</h2>
+            <label class="checkline" for="wg-bc-skip-sent">
+              <input id="wg-bc-skip-sent" type="checkbox" />
+              跳过已经群发过的群（只发没发过的）
+            </label>
+            <label class="checkline" for="wg-bc-date-on">
+              <input id="wg-bc-date-on" type="checkbox" />
+              只发指定日期之后新建的客户群
+            </label>
+            <div class="row" style="margin:4px 0 10px 26px">
+              <label for="wg-bc-date" class="sub" style="margin:0">建群日期不早于</label>
+              <input id="wg-bc-date" type="date" style="margin:0;max-width:180px" />
+            </div>
+            <div class="form-actions">
+              <button type="button" class="secondary small" id="wg-bc-autoselect">按上述条件自动勾选</button>
+              <span class="sub" id="wg-bc-autohint" style="margin-left:8px"></span>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <div>
+              <label for="wg-bc-sender">发送成员（下拉选择）*</label>
+              <select id="wg-bc-sender">
+                <option value="">— 请选择发送成员 —</option>
+              </select>
+            </div>
+            <div>
+              <label class="checkline" for="wg-bc-allow">
+                <input id="wg-bc-allow" type="checkbox" />
+                允许成员重新选择群
+              </label>
+            </div>
+          </div>
+          <label for="wg-bc-text">群发文案 *（最多 4000 字节）</label>
+          <textarea id="wg-bc-text" placeholder="本周交付进度已更新，请查看群公告。" style="min-height:90px"></textarea>
+          <p class="sub" id="wg-bc-count">已勾选 0 个群</p>
+          <div class="form-actions">
+            <button type="button" id="wg-bc-send">创建群发任务</button>
+            <button type="button" class="secondary" id="wg-bc-clear">清空勾选</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2>给选中的群配 Webhook</h2>
+          <p class="sub">先在上表点「选中」，再把群机器人的地址粘到这里保存。</p>
+          <p id="wg-bind-err" class="err"></p>
+          <p class="sub" id="wg-selected-hint">当前未选中群</p>
+          <div class="row">
+            <input id="wg-webhook" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…" style="margin:0;flex:1;min-width:280px" />
+            <button type="button" id="wg-bind">保存到选中群</button>
+          </div>
         </div>
       </section>
 
@@ -271,6 +412,129 @@
         </div>
       </section>
 
+      <section id="page-keywords" class="hidden">
+        <div class="card" style="margin-bottom:14px">
+          <form id="kw-form">
+          <h2 id="kw-form-title">新增关键词回复</h2>
+          <p class="sub">群里 @机器人 发送关键词，机器人自动回复对应内容。配合「智能机器人 · API 模式」使用。</p>
+          <p id="kw-err" class="err"></p>
+          <input type="hidden" id="kw-id" />
+          <div class="grid2">
+            <div>
+              <label for="kw-keyword">关键词 *</label>
+              <input id="kw-keyword" placeholder="如：注意事项 或 1" />
+            </div>
+            <div>
+              <label for="kw-match">匹配方式</label>
+              <select id="kw-match">
+                <option value="exact">精确匹配（消息完全等于关键词）</option>
+                <option value="contains">包含匹配（消息里含关键词）</option>
+              </select>
+            </div>
+            <div>
+              <label for="kw-menu-no">菜单序号（0=不进菜单）</label>
+              <input id="kw-menu-no" type="number" min="0" max="99" value="0" placeholder="1" />
+            </div>
+            <div>
+              <label for="kw-menu-label">菜单显示标题</label>
+              <input id="kw-menu-label" placeholder="如：注意事项（留空用关键词）" />
+            </div>
+          </div>
+          <p class="sub" style="margin:6px 0 0">填了序号就会出现在「@机器人 菜单」里；客户回该数字即得到下面的回复内容。建议关键词直接填数字（1、2、3…）。</p>
+          <label for="kw-reply">回复内容 *</label>
+          <textarea id="kw-reply" placeholder="【交付注意事项】&#10;1. 需求以双方确认为准…" style="min-height:100px"></textarea>
+          <label class="checkline" for="kw-enabled">
+            <input id="kw-enabled" type="checkbox" checked />
+            启用
+          </label>
+          <div class="form-actions">
+            <button type="submit" id="kw-submit">保存</button>
+            <button type="button" class="secondary" id="kw-reset">清空/取消编辑</button>
+          </div>
+          </form>
+          <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">
+            <h3 style="margin:20px 0 6px;font-size:.95rem">菜单管理（在这里直接增删改）</h3>
+            <p class="sub" style="margin:0 0 8px">这些就是客户 <code>@机器人 菜单</code> 看到的内容。改标题时会实时同步到下面预览，点「保存」才会真正生效。</p>
+            <div id="kw-menu-editor"></div>
+            <div id="kw-menu-new" style="border:1px dashed #9ec5ff;border-radius:8px;padding:10px;margin-top:8px;background:#fbfdff">
+              <div class="row" style="gap:8px;align-items:center">
+                <span class="badge" id="kw-new-no">#1</span>
+                <input id="kw-new-label" placeholder="新菜单标题，如：退款政策" style="flex:1;margin:0" />
+                <button type="button" class="secondary small" id="kw-new-add">添加这一项</button>
+              </div>
+              <textarea id="kw-new-reply" placeholder="这一项的内容（客户回数字后收到的）" style="margin-top:8px;min-height:70px"></textarea>
+            </div>
+            <h3 style="margin:20px 0 6px;font-size:.95rem">效果预览（@机器人 菜单 时看到）</h3>
+            <div id="kw-menu-preview" style="background:#eef6ff;border:1px solid #cfe3ff;border-radius:8px;padding:12px 14px;white-space:pre-wrap;line-height:1.7;font-size:.92rem">（还没有菜单项）</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:10px">
+            <h2 style="margin:0">关键词列表</h2>
+            <button type="button" class="secondary small" id="kw-refresh">刷新</button>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>关键词</th>
+                  <th>菜单项</th>
+                  <th>匹配方式</th>
+                  <th>回复内容</th>
+                  <th>状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="kw-tbody">
+                <tr><td colspan="6" class="sub">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-webhooks" class="hidden">
+        <div class="card">
+          <h2>群机器人 Webhook 配置</h2>
+          <p class="sub">客户群发消息依赖群机器人 Webhook。每个群可单独配置（群设置→群机器人→添加后复制地址），也可只配一条全局默认。数据库配置优先于 toml 里的 group_webhook。</p>
+          <p id="wh-err" class="err"></p>
+          <p id="wh-ok" class="ok"></p>
+          <div class="grid2">
+            <div>
+              <label for="wh-chatid">群 ChatID（下拉选择，留空 = 全局默认）</label>
+              <select id="wh-chatid">
+                <option value="">— 全局默认（所有群） —</option>
+              </select>
+              <p class="sub" style="margin:6px 0 0" id="wh-chatid-hint">正在加载客户群…</p>
+            </div>
+            <div>
+              <label for="wh-url">Webhook 地址</label>
+              <input id="wh-url" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…" />
+            </div>
+          </div>
+          <div class="form-actions" style="margin-bottom:16px">
+            <button type="button" id="wh-save">保存</button>
+            <button type="button" class="danger" id="wh-delete">删除该配置</button>
+            <button type="button" class="secondary" id="wh-refresh">刷新列表</button>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>范围</th>
+                  <th>Webhook</th>
+                  <th>更新时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="wh-tbody">
+                <tr><td colspan="4" class="sub">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <section id="page-techs" class="hidden">
         <div class="card" style="margin-bottom:14px">
           <h2 id="tech-form-title">新增技术</h2>
@@ -299,6 +563,14 @@
                 <input id="tech-name-tag" placeholder="🔧后端" />
               </div>
               <div>
+                <label for="tech-emoji">职责 Emoji</label>
+                <input id="tech-emoji" placeholder="💻" />
+              </div>
+              <div>
+                <label for="tech-duty">职责</label>
+                <input id="tech-duty" placeholder="技术支持" />
+              </div>
+              <div>
                 <label class="checkline" for="tech-enabled">
                   <input id="tech-enabled" type="checkbox" checked />
                   启用（禁用后不参与建群匹配）
@@ -323,9 +595,9 @@
             <table>
               <thead>
                 <tr>
-                  <th>姓名</th>
-                  <th>UserID</th>
-                  <th>标识</th>
+                  <th>姓名 / 职责</th>
+                  <th>图标</th>
+                  <th>服务时间</th>
                   <th>状态</th>
                   <th>技术栈</th>
                   <th>操作</th>
@@ -365,19 +637,60 @@
       return data;
     }
 
-    function showPage(name) {
+    // 页签与 URL hash 同步：刷新后停留在当前页
+    const PAGE_NAMES = ['home', 'techs', 'gcfg', 'ledger', 'keywords', 'webhooks', 'wecomgroups', 'stats'];
+
+    function pageFromHash() {
+      const h = (location.hash || '').replace(/^#\/?/, '').trim();
+      return PAGE_NAMES.includes(h) ? h : 'home';
+    }
+
+    function showPage(name, opts) {
+      if (!PAGE_NAMES.includes(name)) name = 'home';
       document.getElementById('page-home').classList.toggle('hidden', name !== 'home');
       document.getElementById('page-techs').classList.toggle('hidden', name !== 'techs');
       document.getElementById('page-gcfg').classList.toggle('hidden', name !== 'gcfg');
       document.getElementById('page-ledger').classList.toggle('hidden', name !== 'ledger');
+      document.getElementById('page-keywords').classList.toggle('hidden', name !== 'keywords');
+      document.getElementById('page-webhooks').classList.toggle('hidden', name !== 'webhooks');
+      document.getElementById('page-wecomgroups').classList.toggle('hidden', name !== 'wecomgroups');
+      document.getElementById('page-stats').classList.toggle('hidden', name !== 'stats');
       document.querySelectorAll('.nav [data-page]').forEach((btn) => {
         btn.classList.toggle('active', btn.dataset.page === name);
       });
+      // 记录到 URL（replace，不污染浏览历史），刷新后仍停在这里
+      if (!opts || !opts.skipHash) {
+        const want = '#/' + name;
+        if (location.hash !== want) {
+          try { history.replaceState(null, '', want); } catch (e) { location.hash = want; }
+        }
+      }
+      try { localStorage.setItem('qw_last_page', name); } catch (e) { /* 忽略隐私模式限制 */ }
       if (name === 'home') loadHomeSummary();
       if (name === 'techs') loadTechs();
       if (name === 'gcfg') loadGlobalConfig();
       if (name === 'ledger') loadLedgerPage();
+      if (name === 'webhooks') { loadWebhooks(); loadChatIDOptions(); }
+      if (name === 'keywords') loadKeywords();
+      if (name === 'wecomgroups') { loadTechFilterOptions(); loadWeComGroups(); loadSenderOptions(); }
+      if (name === 'stats') { loadTechGroups(); }
     }
+
+    // 刷新/重新登录后：优先 URL hash，其次上次记住的页签
+    function restorePage() {
+      let name = pageFromHash();
+      if (name === 'home' && !location.hash) {
+        try {
+          const saved = localStorage.getItem('qw_last_page');
+          if (saved && PAGE_NAMES.includes(saved)) name = saved;
+        } catch (e) { /* 忽略 */ }
+      }
+      showPage(name, { skipHash: true });
+    }
+
+    window.addEventListener('hashchange', () => {
+      showPage(pageFromHash(), { skipHash: true });
+    });
 
     function formatHealth(h) {
       if (!h) return '未知';
@@ -541,6 +854,7 @@
         appView.classList.remove('hidden');
         const h = await api('/api/v1/health');
         healthEl.textContent = formatHealth(h);
+        restorePage();
         return true;
       } catch {
         loginView.classList.remove('hidden');
@@ -578,6 +892,8 @@
       document.getElementById('tech-stack').value = '';
       document.getElementById('tech-work-time').value = '';
       document.getElementById('tech-name-tag').value = '';
+      document.getElementById('tech-emoji').value = '';
+      document.getElementById('tech-duty').value = '';
       document.getElementById('tech-intro').value = '';
       document.getElementById('tech-enabled').checked = true;
       document.getElementById('tech-form-title').textContent = '新增技术';
@@ -592,6 +908,8 @@
       document.getElementById('tech-stack').value = p.stack || '';
       document.getElementById('tech-work-time').value = p.work_time || '';
       document.getElementById('tech-name-tag').value = p.name_tag || '';
+      document.getElementById('tech-emoji').value = p.emoji || '';
+      document.getElementById('tech-duty').value = p.duty || '';
       document.getElementById('tech-intro').value = p.intro || '';
       document.getElementById('tech-enabled').checked = !!p.enabled;
       document.getElementById('tech-form-title').textContent = '编辑技术';
@@ -607,6 +925,8 @@
         stack: document.getElementById('tech-stack').value.trim(),
         work_time: document.getElementById('tech-work-time').value.trim(),
         name_tag: document.getElementById('tech-name-tag').value.trim(),
+        emoji: document.getElementById('tech-emoji').value.trim(),
+        duty: document.getElementById('tech-duty').value.trim(),
         intro: document.getElementById('tech-intro').value.trim(),
         enabled: document.getElementById('tech-enabled').checked,
       };
@@ -623,9 +943,12 @@
         }
         techTbody.innerHTML = items.map((p) => `
           <tr>
-            <td>${esc(p.name)}<div class="sub" style="margin:4px 0 0">${esc(p.work_time || '')}</div></td>
-            <td><code>${esc(p.userid)}</code></td>
-            <td>${esc(p.name_tag || '-')}</td>
+            <td>
+              <div><strong>${esc(p.name)}</strong> <span class="sub">${esc(p.userid)}</span></div>
+              <div class="sub" style="margin:4px 0 0">职责：${esc(p.duty || '未填写')}</div>
+            </td>
+            <td style="font-size:1.3rem;line-height:1.2">${esc(p.emoji || '-')}</td>
+            <td>${esc(p.work_time || '-')}</td>
             <td><span class="badge ${p.enabled ? '' : 'off'}">${p.enabled ? '启用' : '禁用'}</span></td>
             <td>${esc(p.stack || '-')}<div class="sub" style="margin:4px 0 0">${esc(p.intro || '')}</div></td>
             <td class="actions">
@@ -782,7 +1105,895 @@
       }
     });
 
-    refreshMe();
+    // ── Webhook 配置 ──
+    async function loadWebhooks() {
+      const tbody = document.getElementById('wh-tbody');
+      document.getElementById('wh-err').textContent = '';
+      document.getElementById('wh-ok').textContent = '';
+      tbody.innerHTML = '<tr><td colspan="4" class="sub">加载中…</td></tr>';
+      try {
+        const data = await api('/api/v1/admin/webhooks');
+        const items = data.items || [];
+        if (!items.length) {
+          tbody.innerHTML = '<tr><td colspan="4" class="sub">尚未配置任何 Webhook</td></tr>';
+          return;
+        }
+        tbody.innerHTML = items.map((it) => `
+          <tr>
+            <td>${it.chat_id ? esc(it.chat_id) : '<span class="badge">全局默认</span>'}</td>
+            <td style="max-width:320px;word-break:break-all"><code>${esc(shorten(it.webhook, 60))}</code></td>
+            <td>${esc(it.updated_at || '-')}</td>
+            <td><button type="button" class="secondary small" data-wh-edit="${esc(it.webhook)}" data-wh-chat="${esc(it.chat_id || '')}">填入</button></td>
+          </tr>
+        `).join('');
+        tbody.querySelectorAll('[data-wh-edit]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const sel = document.getElementById('wh-chatid');
+            const wanted = btn.dataset.whChat || '';
+            // 下拉里没有该群（例如群已不在列表）时，补一个选项，避免静默丢失
+            if (wanted && !Array.from(sel.options).some((o) => o.value === wanted)) {
+              const opt = document.createElement('option');
+              opt.value = wanted;
+              opt.textContent = wanted + '（未在当前客户群列表）';
+              sel.appendChild(opt);
+            }
+            sel.value = wanted;
+            document.getElementById('wh-url').value = btn.dataset.whEdit;
+          });
+        });
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="4" class="err">${esc(err.message || '加载失败')}</td></tr>`;
+      }
+    }
+
+    function shorten(s, n) {
+      s = String(s || '');
+      return s.length > n ? s.slice(0, n) + '…' : s;
+    }
+
+    document.getElementById('wh-save').addEventListener('click', async () => {
+      document.getElementById('wh-err').textContent = '';
+      document.getElementById('wh-ok').textContent = '';
+      try {
+        await api('/api/v1/admin/webhooks', {
+          method: 'PUT',
+          body: JSON.stringify({
+            chat_id: document.getElementById('wh-chatid').value.trim(),
+            webhook: document.getElementById('wh-url').value.trim(),
+          }),
+        });
+        document.getElementById('wh-ok').textContent = '已保存';
+        document.getElementById('wh-url').value = '';
+        await loadWebhooks();
+      } catch (err) {
+        document.getElementById('wh-err').textContent = err.message || '保存失败';
+      }
+    });
+
+    document.getElementById('wh-delete').addEventListener('click', async () => {
+      const chatId = document.getElementById('wh-chatid').value.trim();
+      if (!confirm(chatId ? '确认删除群 ' + chatId + ' 的 Webhook 配置？' : '确认删除全局默认 Webhook 配置？')) return;
+      document.getElementById('wh-err').textContent = '';
+      try {
+        await api('/api/v1/admin/webhooks', {
+          method: 'PUT',
+          body: JSON.stringify({ chat_id: chatId, webhook: '' }),
+        });
+        document.getElementById('wh-ok').textContent = '已删除';
+        document.getElementById('wh-url').value = '';
+        await loadWebhooks();
+      } catch (err) {
+        document.getElementById('wh-err').textContent = err.message || '删除失败';
+      }
+    });
+
+    document.getElementById('wh-refresh').addEventListener('click', loadWebhooks);
+
+    // ── 关键词回复 ──
+    let lastKeywordItems = [];
+    // 与后端 formatForMobile 保持一致：编号项/小节标题前补空行，连续空行折叠
+    function formatForMobile(text) {
+      const raw = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+      const isSectionStart = (line) => {
+        const t = line.trim();
+        if (!t) return false;
+        if (/^[0-9][.、)）.．]/.test(t)) return true;
+        if (/^[⚠❗❕【■◆●]/.test(t)) return true;      // 提示/标题符号
+        if (/^[\u2460-\u2473]/.test(t)) return true;    // ①…⑳
+        if (/^[0-9]\uFE0F/.test(t)) return true;        // 1️⃣ 2️⃣
+        if (/^[０-９]/.test(t)) return true;            // 全角数字
+        return false;
+      };
+      const out = [];
+      raw.forEach((ln, i) => {
+        const cur = ln.replace(/[ \t]+$/, '').trim();
+        if (cur === '') {
+          if (out.length && out[out.length - 1] !== '') out.push('');
+          return;
+        }
+        if (i > 0 && out.length && out[out.length - 1] !== '' && isSectionStart(cur)) out.push('');
+        out.push(cur);
+      });
+      while (out.length && out[0] === '') out.shift();
+      while (out.length && out[out.length - 1] === '') out.pop();
+      return out.join('\n');
+    }
+
+    function updateKwPreview() {
+      const box = document.getElementById('kw-preview');
+      if (!box) return;
+      const txt = document.getElementById('kw-reply').value;
+      box.textContent = txt.trim() ? formatForMobile(txt) : '（在上方输入回复内容，这里实时预览）';
+    }
+
+    async function loadKeywords() {
+      const tbody = document.getElementById('kw-tbody');
+      const errEl = document.getElementById('kw-err');
+      errEl.textContent = '';
+      tbody.innerHTML = '<tr><td colspan="6" class="sub">加载中…</td></tr>';
+      try {
+        const data = await api('/api/v1/admin/keywords');
+        const items = data.items || [];
+        lastKeywordItems = items;
+        updateKwMenuPreview();
+        renderMenuEditor();
+        if (!items.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="sub">暂无关键词，先在上方新增</td></tr>';
+          return;
+        }
+        const sorted = [...items].sort((a, b) => {
+          const an = a.menu_no || 0, bn = b.menu_no || 0;
+          if (an && bn) return an - bn;
+          if (an) return -1;
+          if (bn) return 1;
+          return a.id - b.id;
+        });
+        tbody.innerHTML = sorted.map((k) => `
+          <tr>
+            <td><strong>${esc(k.keyword)}</strong></td>
+            <td>${k.menu_no > 0 ? `<span class="badge">#${k.menu_no}</span> ${esc(k.menu_label || k.keyword)}` : '<span class="sub">—</span>'}</td>
+            <td>${k.match_type === 'contains' ? '包含' : '精确'}</td>
+            <td style="max-width:420px">
+              <div id="kw-cell-${k.id}" style="white-space:pre-wrap;line-height:1.6;max-height:96px;overflow:hidden">${esc(formatForMobile(k.reply))}</div>
+              <button type="button" class="secondary small" data-kw-more="${k.id}" style="margin-top:6px">展开全文</button>
+            </td>
+            <td><span class="badge ${k.enabled ? '' : 'off'}">${k.enabled ? '启用' : '停用'}</span></td>
+            <td class="actions">
+              <button type="button" class="secondary small" data-kw-edit="${k.id}">编辑</button>
+              <button type="button" class="danger small" data-kw-del="${k.id}">删除</button>
+            </td>
+          </tr>`).join('');
+        tbody.querySelectorAll('[data-kw-more]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const cell = document.getElementById('kw-cell-' + btn.dataset.kwMore);
+            if (!cell) return;
+            const open = cell.style.maxHeight === 'none';
+            cell.style.maxHeight = open ? '96px' : 'none';
+            btn.textContent = open ? '展开全文' : '收起';
+          });
+        });
+        tbody.querySelectorAll('[data-kw-edit]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const items2 = (await api('/api/v1/admin/keywords')).items || [];
+            const k = items2.find((x) => String(x.id) === btn.dataset.kwEdit);
+            if (!k) return;
+            document.getElementById('kw-id').value = k.id;
+            document.getElementById('kw-keyword').value = k.keyword;
+            document.getElementById('kw-match').value = k.match_type || 'exact';
+            document.getElementById('kw-menu-no').value = k.menu_no || 0;
+            document.getElementById('kw-menu-label').value = k.menu_label || '';
+            document.getElementById('kw-reply').value = k.reply;
+            document.getElementById('kw-enabled').checked = !!k.enabled;
+            document.getElementById('kw-form-title').textContent = '编辑关键词回复';
+            updateKwPreview();
+          });
+        });
+        tbody.querySelectorAll('[data-kw-del]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('确认删除该关键词？')) return;
+            try {
+              await api('/api/v1/admin/keywords/' + btn.dataset.kwDel, { method: 'DELETE' });
+              loadKeywords();
+            } catch (e) {
+              errEl.textContent = e.message || '删除失败';
+            }
+          });
+        });
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" class="err">' + esc(e.message || '加载失败') + '</td></tr>';
+      }
+    }
+
+    // 菜单预览：与上面「菜单管理」区实时联动（改标题、加新项都会立刻反映）
+    function updateKwMenuPreview() {
+      const box = document.getElementById('kw-menu-preview');
+      if (!box) return;
+      const inputs = Array.from(document.querySelectorAll('#kw-menu-editor [data-mlabel]'));
+      let rows;
+      if (inputs.length) {
+        rows = inputs.map((inp) => ({
+          no: Number(inp.dataset.mno || 0),
+          label: (inp.value || '').trim() || (inp.dataset.kw || ''),
+        })).filter((r) => r.no > 0);
+      } else {
+        rows = (lastKeywordItems || [])
+          .filter((k) => k.enabled && (k.menu_no || 0) > 0)
+          .map((k) => ({ no: k.menu_no, label: k.menu_label || k.keyword }));
+      }
+      // 虚线框里正在填的新项也实时显示
+      const newLabelEl = document.getElementById('kw-new-label');
+      const newNoEl = document.getElementById('kw-new-no');
+      if (newLabelEl && newNoEl) {
+        const newLabel = (newLabelEl.value || '').trim();
+        const newNo = Number((newNoEl.textContent || '').replace('#', '')) || 0;
+        if (newLabel && newNo) rows.push({ no: newNo, label: newLabel + '（待添加）' });
+      }
+      rows.sort((a, b) => a.no - b.no);
+      if (!rows.length) {
+        box.textContent = '（还没有菜单项：在下面「添加这一项」即可）';
+        return;
+      }
+      const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+      const lines = rows.map((r) => {
+        const mark = (r.no >= 1 && r.no <= 10) ? emojis[r.no - 1] : r.no + '.';
+        return mark + ' ' + r.label;
+      });
+      const header = '【使用方法】\n① 先 @交付助手\n② 再发送数字，例如：@交付助手 2\n\n下面是要看的内容：';
+      box.textContent = header + '\n' + lines.join('\n');
+    }
+
+    // 菜单编辑器：直接增删改菜单项
+    function renderMenuEditor() {
+      const wrap = document.getElementById('kw-menu-editor');
+      if (!wrap) return;
+      const items = (lastKeywordItems || [])
+        .filter((k) => (k.menu_no || 0) > 0)
+        .sort((a, b) => (a.menu_no || 0) - (b.menu_no || 0));
+      if (!items.length) {
+        wrap.innerHTML = '<p class="sub" style="margin:0 0 8px">还没有菜单项，用下面虚线框添加第一项。</p>';
+      } else {
+        wrap.innerHTML = items.map((k) => `
+          <div style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;background:#fff">
+            <div class="row" style="gap:8px;align-items:center">
+              <span class="badge">#${k.menu_no}</span>
+              <input data-mlabel="${k.id}" data-mno="${k.menu_no}" data-kw="${esc(k.keyword)}" value="${esc(k.menu_label || k.keyword)}" placeholder="菜单标题" style="flex:1;margin:0" />
+              <span class="badge ${k.enabled ? '' : 'off'}">${k.enabled ? '启用' : '停用'}</span>
+              <button type="button" class="secondary small" data-msave="${k.id}">保存</button>
+              <button type="button" class="danger small" data-mdel="${k.id}">删除</button>
+            </div>
+            <textarea data-mreply="${k.id}" placeholder="客户回这个数字后收到的内容" style="margin-top:8px;min-height:64px">${esc(k.reply)}</textarea>
+          </div>`).join('');
+        wrap.querySelectorAll('[data-mlabel]').forEach((inp) => {
+          inp.addEventListener('input', updateKwMenuPreview);
+        });
+        wrap.querySelectorAll('[data-msave]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const id = btn.dataset.msave;
+            const item = (lastKeywordItems || []).find((x) => String(x.id) === String(id));
+            if (!item) return;
+            const label = wrap.querySelector(`[data-mlabel="${id}"]`).value.trim();
+            const reply = wrap.querySelector(`[data-mreply="${id}"]`).value;
+            btn.disabled = true;
+            try {
+              await api('/api/v1/admin/keywords/' + id, {
+                method: 'PUT',
+                body: JSON.stringify({
+                  keyword: item.keyword,
+                  match_type: item.match_type || 'exact',
+                  menu_no: item.menu_no,
+                  menu_label: label,
+                  reply,
+                  enabled: item.enabled,
+                }),
+              });
+              flashKwMsg('已保存 #' + item.menu_no);
+              await reloadKeywords();
+            } catch (e) {
+              flashKwMsg('保存失败：' + (e.message || ''), true);
+            } finally {
+              btn.disabled = false;
+            }
+          });
+        });
+        wrap.querySelectorAll('[data-mdel]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const id = btn.dataset.mdel;
+            const item = (lastKeywordItems || []).find((x) => String(x.id) === String(id));
+            if (!confirm(`确认删除菜单第 ${item ? item.menu_no : ''} 项「${item ? (item.menu_label || item.keyword) : ''}」？`)) return;
+            btn.disabled = true;
+            try {
+              await api('/api/v1/admin/keywords/' + id, { method: 'DELETE' });
+              flashKwMsg('已删除');
+              await reloadKeywords();
+            } catch (e) {
+              flashKwMsg('删除失败：' + (e.message || ''), true);
+            } finally {
+              btn.disabled = false;
+            }
+          });
+        });
+      }
+      // 新项的序号 = 当前最大 + 1
+      const maxNo = items.reduce((m, k) => Math.max(m, k.menu_no || 0), 0);
+      const noEl = document.getElementById('kw-new-no');
+      if (noEl) noEl.textContent = '#' + (maxNo + 1);
+    }
+
+    function flashKwMsg(msg, isErr) {
+      const errEl = document.getElementById('kw-err');
+      if (!errEl) return;
+      errEl.textContent = msg;
+      errEl.style.color = isErr ? '' : 'var(--ok, #137333)';
+      setTimeout(() => { errEl.textContent = ''; errEl.style.color = ''; }, 3000);
+    }
+
+    async function reloadKeywords() {
+      const data = await api('/api/v1/admin/keywords');
+      lastKeywordItems = data.items || [];
+      updateKwMenuPreview();
+      renderMenuEditor();
+      loadKeywords();
+    }
+
+    function resetKeywordForm() {
+      document.getElementById('kw-id').value = '';
+      document.getElementById('kw-keyword').value = '';
+      document.getElementById('kw-match').value = 'exact';
+      document.getElementById('kw-menu-no').value = '0';
+      document.getElementById('kw-menu-label').value = '';
+      document.getElementById('kw-reply').value = '';
+      document.getElementById('kw-enabled').checked = true;
+      document.getElementById('kw-form-title').textContent = '新增关键词回复';
+      updateKwPreview();
+    }
+
+    document.getElementById('kw-reply').addEventListener('input', updateKwPreview);
+    document.getElementById('kw-menu-no').addEventListener('input', updateKwMenuPreview);
+    document.getElementById('kw-menu-label').addEventListener('input', updateKwMenuPreview);
+    document.getElementById('kw-new-label').addEventListener('input', updateKwMenuPreview);
+    updateKwPreview();
+
+    // 菜单编辑器：添加一项（关键词自动用序号数字）
+    document.getElementById('kw-new-add').addEventListener('click', async () => {
+      const labelEl = document.getElementById('kw-new-label');
+      const replyEl = document.getElementById('kw-new-reply');
+      const label = labelEl.value.trim();
+      const reply = replyEl.value;
+      const noText = (document.getElementById('kw-new-no').textContent || '#1').replace('#', '');
+      const no = Number(noText || 1);
+      if (!label) { flashKwMsg('请填菜单标题', true); return; }
+      if (!reply.trim()) { flashKwMsg('请填这一项的内容', true); return; }
+      const btn = document.getElementById('kw-new-add');
+      btn.disabled = true;
+      try {
+        await api('/api/v1/admin/keywords', {
+          method: 'POST',
+          body: JSON.stringify({
+            keyword: String(no),
+            match_type: 'exact',
+            menu_no: no,
+            menu_label: label,
+            reply,
+            enabled: true,
+          }),
+        });
+        labelEl.value = '';
+        replyEl.value = '';
+        flashKwMsg('已添加菜单第 ' + no + ' 项');
+        await reloadKeywords();
+      } catch (e) {
+        flashKwMsg('添加失败：' + (e.message || ''), true);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('kw-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById('kw-err');
+      errEl.textContent = '';
+      const id = document.getElementById('kw-id').value;
+      const body = {
+        keyword: document.getElementById('kw-keyword').value.trim(),
+        match_type: document.getElementById('kw-match').value,
+        menu_no: Number(document.getElementById('kw-menu-no').value || 0),
+        menu_label: document.getElementById('kw-menu-label').value.trim(),
+        reply: document.getElementById('kw-reply').value,
+        enabled: document.getElementById('kw-enabled').checked,
+      };
+      try {
+        if (id) {
+          await api('/api/v1/admin/keywords/' + id, { method: 'PUT', body: JSON.stringify(body) });
+        } else {
+          await api('/api/v1/admin/keywords', { method: 'POST', body: JSON.stringify(body) });
+        }
+        resetKeywordForm();
+        loadKeywords();
+      } catch (e2) {
+        errEl.textContent = e2.message || '保存失败';
+      }
+    });
+    document.getElementById('kw-reset').addEventListener('click', resetKeywordForm);
+    document.getElementById('kw-refresh').addEventListener('click', loadKeywords);
+
+    // ── 下拉框数据源 ──
+    // 发送成员：来自技术花名册（只列启用的）
+    async function loadSenderOptions() {
+      const sel = document.getElementById('wg-bc-sender');
+      if (!sel) return;
+      const current = sel.value;
+      try {
+        const data = await api('/api/v1/admin/techs');
+        const items = (data.items || []).filter((p) => p.enabled);
+        sel.innerHTML = '<option value="">— 请选择发送成员 —</option>' +
+          items.map((p) => `<option value="${esc(p.userid)}">${esc(p.name)}（${esc(p.userid)}）</option>`).join('');
+        if (current) sel.value = current;
+        if (!items.length) {
+          sel.innerHTML = '<option value="">花名册为空，请先录入技术</option>';
+        }
+      } catch (e) {
+        sel.innerHTML = '<option value="">加载花名册失败</option>';
+      }
+    }
+
+    // 群 ChatID：来自企微客户群列表
+    async function loadChatIDOptions() {
+      const sel = document.getElementById('wh-chatid');
+      const hint = document.getElementById('wh-chatid-hint');
+      if (!sel) return;
+      const current = sel.value;
+      hint.textContent = '正在加载客户群…';
+      try {
+        const data = await api('/api/v1/admin/wecom/groups');
+        const items = data.items || [];
+        sel.innerHTML = '<option value="">— 全局默认（所有群） —</option>' +
+          items.map((it) => `<option value="${esc(it.chat_id)}">${esc(it.display_name)}（${it.member_count || 0} 人）</option>`).join('');
+        if (current) sel.value = current;
+        hint.textContent = items.length ? ('共 ' + items.length + ' 个客户群，选择后只对该群生效') : '没有可选的客户群';
+      } catch (e) {
+        hint.textContent = '加载客户群失败：' + (e.message || '');
+      }
+    }
+
+    // ── 统计页：技术 → 客户群 ──
+    let techGroupRows = [];
+
+    function techLabel(row) {
+      const t = (row.tech_name || '').trim();
+      if (!t || t === '待分配') return '未分配';
+      return t;
+    }
+
+    async function loadTechGroups() {
+      const errEl = document.getElementById('st-err');
+      const tbody = document.getElementById('st-tbody');
+      const sel = document.getElementById('st-tech-filter');
+      if (!tbody) return;
+      errEl.textContent = '';
+      tbody.innerHTML = '<tr><td colspan="3" class="sub">加载中…</td></tr>';
+      try {
+        const data = await api('/api/v1/admin/groups');
+        techGroupRows = data.items || [];
+        const current = sel.value;
+        const techs = [...new Set(techGroupRows.map(techLabel))].sort((a, b) => {
+          if (a === '未分配') return 1;
+          if (b === '未分配') return -1;
+          return a.localeCompare(b, 'zh-CN');
+        });
+        sel.innerHTML = '<option value="">全部技术</option>' +
+          techs.map((t) => {
+            const n = techGroupRows.filter((r) => techLabel(r) === t).length;
+            return `<option value="${esc(t)}">${esc(t)}（${n} 个群）</option>`;
+          }).join('');
+        if (current && techs.includes(current)) sel.value = current;
+        renderTechGroups();
+      } catch (e) {
+        errEl.textContent = e.message || '加载失败';
+        tbody.innerHTML = '<tr><td colspan="3" class="err">' + esc(e.message || '加载失败') + '</td></tr>';
+      }
+    }
+
+    function renderTechGroups() {
+      const tbody = document.getElementById('st-tbody');
+      const filter = document.getElementById('st-tech-filter').value;
+      const rows = techGroupRows.filter((r) => !filter || techLabel(r) === filter);
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="sub">没有记录</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map((r) => `
+        <tr>
+          <td>${esc(techLabel(r))}</td>
+          <td>${esc(r.name || '未命名群')}</td>
+          <td><code>${esc(r.chat_id)}</code></td>
+        </tr>`).join('');
+    }
+
+    document.getElementById('st-refresh').addEventListener('click', loadTechGroups);
+    document.getElementById('st-tech-filter').addEventListener('change', renderTechGroups);
+
+    // ── 客户群：筛选 + 选中 + 配 Webhook ──
+    let selectedChatID = '';
+    const broadcastSelection = new Set();
+    let lastGroupItems = [];
+
+    function updateBroadcastCount() {
+      const el = document.getElementById('wg-bc-count');
+      if (el) el.textContent = '已勾选 ' + broadcastSelection.size + ' 个群';
+    }
+
+    // 按「跳过已群发 / 建群日期」条件自动勾选
+    function autoSelectByRules() {
+      const skipSent = document.getElementById('wg-bc-skip-sent').checked;
+      const dateOn = document.getElementById('wg-bc-date-on').checked;
+      const dateVal = document.getElementById('wg-bc-date').value;
+      const hint = document.getElementById('wg-bc-autohint');
+      if (!skipSent && !dateOn) {
+        hint.textContent = '请先勾选至少一个筛选条件';
+        return;
+      }
+      let since = 0;
+      if (dateOn) {
+        if (!dateVal) { hint.textContent = '请选择建群日期'; return; }
+        since = new Date(dateVal + 'T00:00:00').getTime() / 1000;
+      }
+      let matched = 0;
+      let skippedSent = 0;
+      let skippedDate = 0;
+      lastGroupItems.forEach((it) => {
+        let ok = true;
+        if (skipSent && (it.broadcast_count || 0) > 0) { ok = false; skippedSent++; }
+        if (ok && dateOn) {
+          if (!it.create_time || it.create_time < since) { ok = false; skippedDate++; }
+        }
+        if (ok) {
+          broadcastSelection.add(it.chat_id);
+          matched++;
+        }
+      });
+      document.querySelectorAll('#wg-tbody [data-pick]').forEach((box) => {
+        box.checked = broadcastSelection.has(box.dataset.pick);
+      });
+      updateBroadcastCount();
+      hint.textContent = '已勾选 ' + matched + ' 个；跳过已群发 ' + skippedSent + ' 个、日期不符 ' + skippedDate + ' 个';
+    }
+
+    async function sendBroadcast() {
+      const errEl = document.getElementById('wg-bc-err');
+      const okEl = document.getElementById('wg-bc-ok');
+      errEl.textContent = '';
+      okEl.textContent = '';
+      const sender = document.getElementById('wg-bc-sender').value.trim();
+      const text = document.getElementById('wg-bc-text').value.trim();
+      if (!broadcastSelection.size) { errEl.textContent = '请先在上表勾选要发的群'; return; }
+      if (!sender) { errEl.textContent = '请填写发送成员 UserID'; return; }
+      if (!text) { errEl.textContent = '请填写群发文案'; return; }
+      const skipSent = document.getElementById('wg-bc-skip-sent').checked;
+      const dateOn = document.getElementById('wg-bc-date-on').checked;
+      const createdAfter = dateOn ? document.getElementById('wg-bc-date').value : '';
+      if (dateOn && !createdAfter) { errEl.textContent = '请选择建群日期'; return; }
+      const btn = document.getElementById('wg-bc-send');
+      btn.disabled = true;
+      try {
+        const r = await api('/api/v1/admin/broadcast', {
+          method: 'POST',
+          body: JSON.stringify({
+            chat_ids: Array.from(broadcastSelection),
+            sender,
+            text,
+            allow_select: document.getElementById('wg-bc-allow').checked,
+            skip_sent: skipSent,
+            created_after: createdAfter,
+          }),
+        });
+        let msg = '已创建群发任务，msgid=' + (r.msgid || '-') + '，成功 ' + r.accepted + ' 个群';
+        if (r.skipped && r.skipped.length) {
+          msg += '；跳过 ' + r.skipped.length + ' 个';
+        }
+        if (r.fail_list && r.fail_list.length) {
+          msg += '；失败 ' + r.fail_list.length + ' 个：' + r.fail_list.join(', ');
+        }
+        msg += '\n' + (r.note || '');
+        okEl.textContent = msg;
+        if (r.skip_notes && r.skip_notes.length) {
+          okEl.textContent += '\n跳过明细：' + r.skip_notes.slice(0, 10).join('；');
+        }
+        loadWeComGroups();
+      } catch (e) {
+        errEl.textContent = e.message || '群发失败';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function wgStatusText(status) {
+      return ledgerStatusText(status);
+    }
+
+    // 技术筛选项：来自花名册
+    let wgTechOptions = [];
+    async function loadTechFilterOptions() {
+      const sel = document.getElementById('wg-tech-filter');
+      if (!sel) return;
+      try {
+        const data = await api('/api/v1/admin/techs');
+        const list = (data.items || []).filter((p) => p.enabled);
+        wgTechOptions = list;
+        const current = sel.value;
+        sel.innerHTML = '<option value="">全部技术</option>' +
+          '<option value="__none__">未分配（没有技术）</option>' +
+          list.map((p) => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+        if (current) sel.value = current;
+      } catch (e) { /* 忽略 */ }
+    }
+
+    function techMatchesFilter(it, filter) {
+      if (!filter) return true;
+      const tech = (it.tech_name || '').trim();
+      if (filter === '__none__') return !tech || tech === '待分配';
+      return tech === filter;
+    }
+
+    async function loadWeComGroups() {
+      const tbody = document.getElementById('wg-tbody');
+      const errEl = document.getElementById('wg-err');
+      errEl.textContent = '';
+      document.getElementById('wg-ok').textContent = '';
+      tbody.innerHTML = '<tr><td colspan="8" class="sub">正在从企微拉取客户群…</td></tr>';
+      const q = document.getElementById('wg-search').value.trim();
+      const techFilter = document.getElementById('wg-tech-filter').value;
+      try {
+        const data = await api('/api/v1/admin/wecom/groups' + (q ? '?q=' + encodeURIComponent(q) : ''));
+        const items = (data.items || []).filter((it) => techMatchesFilter(it, techFilter));
+        lastGroupItems = items;
+        if (!items.length) {
+          tbody.innerHTML = '<tr><td colspan="8" class="sub">没有匹配的客户群</td></tr>';
+          return;
+        }
+        tbody.innerHTML = items.map((it) => {
+          const badge = it.has_webhook
+            ? '<span class="badge">已配置' + (it.webhook_scope === 'default' ? '（默认）' : '') + '</span>'
+            : '<span class="badge off">未配置</span>';
+          const sel = it.chat_id === selectedChatID ? '已选中' : '选中';
+          const checked = broadcastSelection.has(it.chat_id) ? 'checked' : '';
+          const bc = (it.broadcast_count || 0) > 0
+            ? '<div class="sub" style="margin:4px 0 0">已发 ' + it.broadcast_count + ' 次' + (it.last_broadcast_at ? ' · ' + esc(it.last_broadcast_at) : '') + '</div>'
+            : '';
+          const created = it.create_time
+            ? '<div class="sub" style="margin:4px 0 0">建群 ' + new Date(it.create_time * 1000).toLocaleDateString('zh-CN') + '</div>'
+            : '';
+          // 群名图标诊断：群名里的 emoji → 匹配到谁（或没匹配上）
+          let iconHint = '';
+          if ((it.name_icons || []).length) {
+            const icons = (it.name_icons || []).join(' ');
+            iconHint = it.icon_tech
+              ? `<div class="sub" style="margin:4px 0 0;color:#137333">群名图标 ${esc(icons)} → 命中 ${esc(it.icon_tech)}</div>`
+              : `<div class="sub" style="margin:4px 0 0;color:#b45309">群名图标 ${esc(icons)} → 未匹配花名册</div>`;
+          }
+          return `
+            <tr>
+              <td><input type="checkbox" data-pick="${esc(it.chat_id)}" ${checked} /></td>
+              <td>${esc(it.display_name)}<div class="sub" style="margin:4px 0 0">${esc((it.member_names || []).join('、'))}</div>${created}${bc}${iconHint}</td>
+              <td><code>${esc(it.chat_id)}</code></td>
+              <td>${it.member_count || 0}
+                <div class="sub" style="margin:4px 0 0">${(it.members || []).map((m) => esc(m.name || m.userid) + (m.type === 2 ? '（外部）' : '')).join('、')}</div>
+              </td>
+              <td>
+                ${esc(it.tech_name || '-')}
+                <div style="margin-top:4px">
+                  <select data-techsel="${esc(it.chat_id)}" style="margin:0;max-width:130px;font-size:.8rem">
+                    <option value="">指定技术…</option>
+                    ${wgTechOptions.map((p) => `<option value="${esc(p.userid)}"${p.name === (it.tech_name || '') ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}
+                    <option value="__clear__">清除（待分配）</option>
+                  </select>
+                </div>
+              </td>
+              <td>${esc(wgStatusText(it.ledger_status))}</td>
+              <td>${badge}</td>
+              <td class="actions">
+                <button type="button" class="secondary small" data-select="${esc(it.chat_id)}" data-label="${esc(it.display_name)}">${sel}</button>
+                <button type="button" class="secondary small" data-onboard="${esc(it.chat_id)}">立即执行</button>
+                <button type="button" class="secondary small" data-notify="${esc(it.chat_id)}" title="私聊群内花名册技术：新群提醒 + 建议群名">提醒技术</button>
+              </td>
+            </tr>`;
+        }).join('');
+
+        // 人工指定技术：选中即保存
+        tbody.querySelectorAll('[data-techsel]').forEach((selEl) => {
+          selEl.addEventListener('change', async () => {
+            const chatID = selEl.dataset.techsel;
+            const v = selEl.value;
+            if (!v) return;
+            const userid = v === '__clear__' ? '' : v;
+            selEl.disabled = true;
+            try {
+              const r = await api('/api/v1/admin/wecom/groups/' + encodeURIComponent(chatID) + '/tech', {
+                method: 'POST',
+                body: JSON.stringify({ userid }),
+              });
+              document.getElementById('wg-ok').textContent = userid
+                ? `已把该群技术指定为「${r.tech_name || userid}」（名下第 ${r.seq_no || '?'} 个群）`
+                : '已清除该群技术（待分配）';
+              loadWeComGroups();
+            } catch (e) {
+              document.getElementById('wg-err').textContent = e.message || '指定失败';
+              selEl.value = '';
+            } finally {
+              selEl.disabled = false;
+            }
+          });
+        });
+
+        tbody.querySelectorAll('[data-pick]').forEach((box) => {
+          box.addEventListener('change', () => {
+            if (box.checked) broadcastSelection.add(box.dataset.pick);
+            else broadcastSelection.delete(box.dataset.pick);
+            updateBroadcastCount();
+          });
+        });
+        updateBroadcastCount();
+
+        tbody.querySelectorAll('[data-select]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            selectedChatID = btn.dataset.select;
+            document.getElementById('wg-selected-hint').innerHTML =
+              '当前选中：<strong>' + esc(btn.dataset.label) + '</strong> <code>' + esc(selectedChatID) + '</code>';
+            loadWeComGroups();
+          });
+        });
+        tbody.querySelectorAll('[data-onboard]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('对这个群执行一次建群流水线？会往群里发消息。')) return;
+            btn.disabled = true;
+            try {
+              const r = await api('/api/v1/admin/wecom/groups/' + encodeURIComponent(btn.dataset.onboard) + '/onboard', { method: 'POST' });
+              document.getElementById('wg-ok').textContent = r.skipped ? '已跳过（触发范围限制）' : '已执行，去群里看效果';
+            } catch (e) {
+              document.getElementById('wg-err').textContent = e.message || '执行失败';
+            } finally {
+              btn.disabled = false;
+            }
+          });
+        });
+        tbody.querySelectorAll('[data-notify]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('私聊提醒该群内的技术？会给他们发「新群提醒 + 建议群名」两条消息。')) return;
+            btn.disabled = true;
+            try {
+              const r = await api('/api/v1/admin/wecom/groups/' + encodeURIComponent(btn.dataset.notify) + '/notify-techs', { method: 'POST' });
+              document.getElementById('wg-ok').textContent = r.note || '已发送提醒';
+            } catch (e) {
+              document.getElementById('wg-err').textContent = e.message || '发送失败';
+            } finally {
+              btn.disabled = false;
+            }
+          });
+        });
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="8" class="err">' + esc(e.message || '加载失败') + '</td></tr>';
+      }
+    }
+
+    document.getElementById('wg-refresh').addEventListener('click', loadWeComGroups);
+    document.getElementById('wg-filter').addEventListener('click', loadWeComGroups);
+    document.getElementById('wg-tech-filter').addEventListener('change', loadWeComGroups);
+    document.getElementById('wg-clear').addEventListener('click', () => {
+      document.getElementById('wg-search').value = '';
+      loadWeComGroups();
+    });
+    document.getElementById('wg-search').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') loadWeComGroups();
+    });
+    document.getElementById('wg-check-all').addEventListener('change', (e) => {
+      const on = e.target.checked;
+      document.querySelectorAll('#wg-tbody [data-pick]').forEach((box) => {
+        box.checked = on;
+        if (on) broadcastSelection.add(box.dataset.pick);
+        else broadcastSelection.delete(box.dataset.pick);
+      });
+      updateBroadcastCount();
+    });
+    document.getElementById('wg-bc-send').addEventListener('click', sendBroadcast);
+    document.getElementById('wg-bc-autoselect').addEventListener('click', autoSelectByRules);
+    document.getElementById('wg-bc-clear').addEventListener('click', () => {
+      broadcastSelection.clear();
+      document.querySelectorAll('#wg-tbody [data-pick]').forEach((b) => { b.checked = false; });
+      document.getElementById('wg-check-all').checked = false;
+      updateBroadcastCount();
+    });
+    document.getElementById('wg-bind').addEventListener('click', async () => {
+      const errEl = document.getElementById('wg-bind-err');
+      errEl.textContent = '';
+      if (!selectedChatID) {
+        errEl.textContent = '请先在上表点「选中」一个群';
+        return;
+      }
+      const webhook = document.getElementById('wg-webhook').value.trim();
+      if (!webhook) {
+        errEl.textContent = '请粘贴群机器人 Webhook 地址';
+        return;
+      }
+      try {
+        await api('/api/v1/admin/webhooks', {
+          method: 'PUT',
+          body: JSON.stringify({ chat_id: selectedChatID, webhook }),
+        });
+        document.getElementById('wg-ok').textContent = '已保存到 ' + selectedChatID;
+        document.getElementById('wg-webhook').value = '';
+        loadWeComGroups();
+      } catch (e) {
+        errEl.textContent = e.message || '保存失败';
+      }
+    });
+
+    // ── 企微扫码登录 ──
+    async function initWeComScan() {
+      const section = document.getElementById('wecom-scan-section');
+      const errEl = document.getElementById('wecom-scan-err');
+      try {
+        const cfg = await api('/api/v1/admin/wecom-scan-config');
+        if (!cfg.enabled) {
+          // 未配置企微，隐藏扫码区域
+          section.classList.add('hidden');
+          return;
+        }
+        section.classList.remove('hidden');
+
+        // 加载企微登录 JS SDK
+        const script = document.createElement('script');
+        script.src = 'https://wwcdn.weixin.qq.com/node/wework/wwopen/js/wwLogin-1.2.7.js';
+        script.onerror = () => {
+          errEl.textContent = '企微登录组件加载失败';
+        };
+        script.onload = () => {
+          try {
+            // 企微内嵌二维码登录
+            const wwLogin = new WwLogin({
+              id: 'wecom-qr-container',
+              appid: cfg.corp_id,
+              agentid: String(cfg.agent_id),
+              redirect_uri: encodeURIComponent(cfg.redirect_uri),
+              state: 'wecom_scan_' + Date.now(),
+              href: '',
+              lang: 'zh',
+            });
+            // 隐藏占位符
+            const placeholder = document.getElementById('wecom-qr-placeholder');
+            if (placeholder) placeholder.style.display = 'none';
+          } catch (e) {
+            errEl.textContent = '企微二维码初始化失败：' + (e.message || e);
+          }
+        };
+        document.head.appendChild(script);
+      } catch (e) {
+        // 获取配置失败，静默隐藏
+        section.classList.add('hidden');
+      }
+    }
+
+    // 处理 OAuth 回调（从企微扫码重定向回来时 URL 带 code 参数）
+    function handleOAuthCallback() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      if (!code) return false;
+      // 清除 URL 中的 code 参数，避免刷新重复处理
+      const cleanURL = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanURL);
+      // 用 code 换取会话
+      loginErr.textContent = '企微扫码登录中…';
+      api('/api/v1/admin/wecom-oauth-callback?code=' + encodeURIComponent(code))
+        .then(() => refreshMe())
+        .catch((err) => {
+          loginErr.textContent = '企微扫码登录失败：' + (err.message || '未知错误');
+        });
+      return true;
+    }
+
+    // 页面初始化
+    if (!handleOAuthCallback()) {
+      refreshMe();
+      initWeComScan();
+    };
   </script>
 </body>
 </html>

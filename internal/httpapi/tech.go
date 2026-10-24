@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/clxstart/qiwei-zhushou/internal/tech"
@@ -30,7 +31,20 @@ func (s *Server) handleListTechs(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []tech.Person{}
 	}
+	// 置顶排序：小星老师（HaJiMi）固定第一行，其余保持原顺序
+	sort.SliceStable(list, func(i, j int) bool {
+		return pinnedTechRank(list[i].UserID) < pinnedTechRank(list[j].UserID)
+	})
 	writeJSON(w, http.StatusOK, map[string]any{"items": list})
+}
+
+// pinnedTechRank 越小越靠前；未置顶返回 1。
+func pinnedTechRank(userID string) int {
+	switch userID {
+	case "HaJiMi": // 小星老师
+		return 0
+	}
+	return 1
 }
 
 func (s *Server) handleCreateTech(w http.ResponseWriter, r *http.Request) {

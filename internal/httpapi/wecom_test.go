@@ -58,6 +58,39 @@ func TestWeComCallback_Wired(t *testing.T) {
 	}
 }
 
+func TestWeComOutboundOnly_DisablesScanAndOAuth(t *testing.T) {
+	cfg := &config.Config{
+		Static:  config.StaticConfig{Dir: t.TempDir()},
+		Session: config.SessionConfig{CookieName: "qw_admin_session", Secret: "0123456789abcdef"},
+		WeCom: config.WeComConfig{
+			CorpID:       "wwCORP",
+			OutboundOnly: true,
+		},
+	}
+	s := NewServer(ServerDeps{Config: cfg, Sess: auth.NewSessionManager(auth.NewMemorySessionStore(), time.Hour), WeComGateway: wecom.NewFakeGateway()})
+
+	for _, tc := range []struct {
+		name string
+		path string
+		want int
+	}{
+		{name: "scan config", path: "/api/v1/admin/wecom-scan-config", want: http.StatusOK},
+		{name: "oauth callback", path: "/api/v1/admin/wecom-oauth-callback?code=test", want: http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			s.Handler().ServeHTTP(rr, req)
+			if rr.Code != tc.want {
+				t.Fatalf("status=%d want=%d body=%s", rr.Code, tc.want, rr.Body.String())
+			}
+			if tc.name == "scan config" && rr.Body.String() != "{\"enabled\":false}\n" {
+				t.Fatalf("scan config body=%s", rr.Body.String())
+			}
+		})
+	}
+}
+
 func wecomQueryEscape(s string) string {
 	// reuse net/url via simple replace for base64 charset
 	r := make([]byte, 0, len(s)*3)

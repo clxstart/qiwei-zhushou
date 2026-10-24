@@ -7,15 +7,19 @@ import (
 
 // GroupOverview 群列表行（群 + 账务摘要）。
 type GroupOverview struct {
-	ChatID        string    `json:"chat_id"`
-	Name          string    `json:"name"`
-	CreatorUserID string    `json:"creator_userid"`
-	IsExternal    bool      `json:"is_external"`
-	TechName      string    `json:"tech_name"`
-	LedgerStatus  string    `json:"ledger_status"`
-	Deposit       int64     `json:"deposit"`
-	Total         int64     `json:"total"`
-	Tail          int64     `json:"tail"`
+	ChatID        string `json:"chat_id"`
+	Name          string `json:"name"`
+	CreatorUserID string `json:"creator_userid"`
+	IsExternal    bool   `json:"is_external"`
+	TechName      string `json:"tech_name"`
+	LedgerStatus  string `json:"ledger_status"`
+	Deposit       int64  `json:"deposit"`
+	Total         int64  `json:"total"`
+	Tail          int64  `json:"tail"`
+	// Paid 该群实收（分，来自对外收款流水；未接入时为 0）
+	Paid int64 `json:"paid"`
+	// Unpaid 未收（分）= total*100 - paid，最低 0
+	Unpaid        int64     `json:"unpaid"`
 	CodeSent      bool      `json:"code_sent"`
 	CodeSentCount int       `json:"code_sent_count"`
 	Settled       bool      `json:"settled"`
@@ -24,9 +28,10 @@ type GroupOverview struct {
 
 // GroupDetail 群详情。
 type GroupDetail struct {
-	Group   *GroupChat `json:"group"`
-	Ledger  *Ledger    `json:"ledger"`
-	OpLogs  []OpLog    `json:"op_logs"`
+	Group  *GroupChat          `json:"group"`
+	Ledger *Ledger             `json:"ledger"`
+	OpLogs []OpLog             `json:"op_logs"`
+	Bills  []PaymentBillRecord `json:"bills,omitempty"`
 }
 
 // Summary 总账汇总。
@@ -34,12 +39,16 @@ type GroupDetail struct {
 // 今日/本月：按 ledger.updated_at 落在对应自然日/自然月（业务时区 UTC+8）且 status=settled 的 total 求和。
 // 未结清数量：status 不为 settled 且 total>0 的账本数（已入账未结清）。
 type Summary struct {
-	TodayIncome      int64 `json:"today_income"`
-	MonthIncome      int64 `json:"month_income"`
-	UnsettledCount   int   `json:"unsettled_count"`
-	SettledCount     int   `json:"settled_count"`
+	TodayIncome       int64 `json:"today_income"`
+	MonthIncome       int64 `json:"month_income"`
+	UnsettledCount    int   `json:"unsettled_count"`
+	SettledCount      int   `json:"settled_count"`
 	TotalBookedAmount int64 `json:"total_booked_amount"` // 所有已入账 total 合计（含已结清）
-	GroupCount       int   `json:"group_count"`
+	GroupCount        int   `json:"group_count"`
+	// TotalPaid 对外收款实收合计（分）；未接入流水时为 0
+	TotalPaid int64 `json:"total_paid"`
+	// UnmatchedBills 未匹配到群的流水笔数
+	UnmatchedBills int `json:"unmatched_bills"`
 }
 
 // ListGroupOverviews 群列表 + 账务字段。
@@ -55,6 +64,12 @@ func (b *Bot) ListGroupOverviews(ctx context.Context) ([]GroupOverview, error) {
 	byChat := map[string]Ledger{}
 	for _, l := range ledgers {
 		byChat[l.ChatID] = l
+	}
+	paid := map[string]int64{}
+	if b.bills != nil {
+		if records, err := b.bills.ListAll(ctx); err == nil {
+			paid = PaidByChat(records)
+		}
 	}
 	out := make([]GroupOverview, 0, len(groups))
 	for _, g := range groups {
@@ -79,6 +94,10 @@ func (b *Bot) ListGroupOverviews(ctx context.Context) ([]GroupOverview, error) {
 				ov.UpdatedAt = l.UpdatedAt
 			}
 		}
+		ov.Paid = paid[g.ChatID]
+		if due := ov.Total*100 - ov.Paid; due > 0 {
+			ov.Unpaid = due
+		}
 		out = append(out, ov)
 	}
 	return out, nil
@@ -101,7 +120,13 @@ func (b *Bot) GetGroupDetail(ctx context.Context, chatID string) (*GroupDetail, 
 	if logs == nil {
 		logs = []OpLog{}
 	}
-	return &GroupDetail{Group: g, Ledger: led, OpLogs: logs}, nil
+	detail := &GroupDetail{Group: g, Ledger: led, OpLogs: logs}
+	if b.bills != nil {
+		if records, err := b.bills.List(ctx, chatID, 50); err == nil {
+			detail.Bills = records
+		}
+	}
+	return detail, nil
 }
 
 // GetSummary 汇总指标。
@@ -135,6 +160,17 @@ func (b *Bot) GetSummary(ctx context.Context) (*Summary, error) {
 			}
 		} else if l.Total > 0 {
 			sum.UnsettledCount++
+		}
+	}
+	if b.bills != nil {
+		if records, err := b.bills.ListAll(ctx); err == nil {
+			for _, r := range records {
+				if r.ChatID == "" {
+					sum.UnmatchedBills++
+					continue
+				}
+				sum.TotalPaid += r.NetFee()
+			}
 		}
 	}
 	return sum, nil

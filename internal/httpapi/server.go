@@ -16,6 +16,7 @@ import (
 	"github.com/clxstart/qiwei-zhushou/internal/config"
 	"github.com/clxstart/qiwei-zhushou/internal/delivery"
 	"github.com/clxstart/qiwei-zhushou/internal/globalcfg"
+	"github.com/clxstart/qiwei-zhushou/internal/store"
 	"github.com/clxstart/qiwei-zhushou/internal/tech"
 	"github.com/clxstart/qiwei-zhushou/internal/wecom"
 )
@@ -27,43 +28,70 @@ type HealthPinger interface {
 
 // Server HTTP API + 静态托管 + 管理员会话。
 type Server struct {
-	cfg      *config.Config
-	authn    *auth.Authenticator
-	sess     *auth.SessionManager
-	pinger   HealthPinger
-	techs    *tech.Service
-	gcfg     *globalcfg.Service
-	delivery *delivery.Bot
-	wecomGW  wecom.Gateway
-	wecomCB  http.Handler
-	mux      *http.ServeMux
+	cfg              *config.Config
+	authn            *auth.Authenticator
+	sess             *auth.SessionManager
+	pinger           HealthPinger
+	techs            *tech.Service
+	gcfg             *globalcfg.Service
+	delivery         *delivery.Bot
+	groupSync        *delivery.GroupSynchronizer
+	payments         *delivery.PaymentSyncer
+	paymentBills     delivery.PaymentBillStore
+	broadcast        *delivery.Broadcaster
+	broadcastHistory delivery.BroadcastHistoryStore
+	groupStats       *delivery.GroupStats
+	keywords         delivery.KeywordReplyStore
+	aiBot            http.Handler
+	webhooks         *store.WebhookStore
+	wecomGW          wecom.Gateway
+	wecomCB          http.Handler
+	mux              *http.ServeMux
 }
 
 // ServerDeps 装配依赖，避免构造参数继续膨胀。
 type ServerDeps struct {
-	Config        *config.Config
-	Authn         *auth.Authenticator
-	Sess          *auth.SessionManager
-	Pinger        HealthPinger
-	Techs         *tech.Service
-	GlobalCfg     *globalcfg.Service
-	Delivery      *delivery.Bot
-	WeComGateway  wecom.Gateway
-	WeComCallback http.Handler
+	Config            *config.Config
+	Authn             *auth.Authenticator
+	Sess              *auth.SessionManager
+	Pinger            HealthPinger
+	Techs             *tech.Service
+	GlobalCfg         *globalcfg.Service
+	Delivery          *delivery.Bot
+	GroupSynchronizer *delivery.GroupSynchronizer
+	PaymentSyncer     *delivery.PaymentSyncer
+	PaymentBillStore  delivery.PaymentBillStore
+	Broadcaster       *delivery.Broadcaster
+	BroadcastHistory  delivery.BroadcastHistoryStore
+	GroupStats        *delivery.GroupStats
+	KeywordStore      delivery.KeywordReplyStore
+	AiBotHandler      http.Handler
+	WebhookStore      *store.WebhookStore
+	WeComGateway      wecom.Gateway
+	WeComCallback     http.Handler
 }
 
 func NewServer(deps ServerDeps) *Server {
 	s := &Server{
-		cfg:      deps.Config,
-		authn:    deps.Authn,
-		sess:     deps.Sess,
-		pinger:   deps.Pinger,
-		techs:    deps.Techs,
-		gcfg:     deps.GlobalCfg,
-		delivery: deps.Delivery,
-		wecomGW:  deps.WeComGateway,
-		wecomCB:  deps.WeComCallback,
-		mux:      http.NewServeMux(),
+		cfg:              deps.Config,
+		authn:            deps.Authn,
+		sess:             deps.Sess,
+		pinger:           deps.Pinger,
+		techs:            deps.Techs,
+		gcfg:             deps.GlobalCfg,
+		delivery:         deps.Delivery,
+		groupSync:        deps.GroupSynchronizer,
+		payments:         deps.PaymentSyncer,
+		paymentBills:     deps.PaymentBillStore,
+		broadcast:        deps.Broadcaster,
+		broadcastHistory: deps.BroadcastHistory,
+		groupStats:       deps.GroupStats,
+		keywords:         deps.KeywordStore,
+		aiBot:            deps.AiBotHandler,
+		webhooks:         deps.WebhookStore,
+		wecomGW:          deps.WeComGateway,
+		wecomCB:          deps.WeComCallback,
+		mux:              http.NewServeMux(),
 	}
 	s.routes()
 	return s
@@ -78,13 +106,30 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/admin/login", s.handleLogin)
 	s.mux.HandleFunc("POST /api/v1/admin/logout", s.handleLogout)
 	s.mux.HandleFunc("GET /api/v1/admin/me", s.requireAdmin(s.handleMe))
+	s.mux.HandleFunc("GET /api/v1/admin/wecom-oauth-callback", s.handleWeComOAuthCallback)
+	s.mux.HandleFunc("GET /api/v1/admin/wecom-scan-config", s.handleWeComScanConfig)
 	s.registerTechRoutes()
 	s.registerGlobalConfigRoutes()
 	s.registerDeliveryRoutes()
+	s.registerWebhookRoutes()
 	s.registerPaymentRoutes()
+	s.registerPaymentRecordRoutes()
+	s.registerWeComGroupRoutes()
+	s.registerGroupStatsRoutes()
+	s.registerKeywordRoutes()
+	s.registerBroadcastRoutes()
 	s.registerAdminOpsRoutes()
 	s.registerReportRoutes()
 	s.registerWeComRoutes()
+
+	// 智能机器人回调（API 模式 URL 回调）
+	if s.aiBot != nil {
+		path := "/wecom/aibot"
+		if s.cfg != nil && strings.TrimSpace(s.cfg.WeCom.AiBotPath) != "" {
+			path = strings.TrimSpace(s.cfg.WeCom.AiBotPath)
+		}
+		s.mux.Handle(path, s.aiBot)
+	}
 
 	// 静态资源（管理壳 + H5）
 	s.mux.Handle("/", s.staticHandler())
@@ -263,4 +308,63 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]any{"error": msg})
+}
+
+// handleWeComScanConfig 返回前端扫码登录所需的配置（corpid、agentid、redirect_uri）。
+// 仅当 corpid 已配置时返回有效数据，否则返回空。
+func (s *Server) handleWeComScanConfig(w http.ResponseWriter, r *http.Request) {
+	cfg := s.cfg.WeCom
+	if cfg.OutboundOnly || strings.TrimSpace(cfg.CorpID) == "" {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"enabled": false,
+		})
+		return
+	}
+	redirectURI := strings.TrimSpace(cfg.OAuthRedirectURI)
+	if redirectURI == "" {
+		// 默认用当前请求的 origin 拼接回调路径
+		scheme := "http"
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			scheme = "https"
+		}
+		redirectURI = scheme + "://" + r.Host + "/api/v1/admin/wecom-oauth-callback"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"enabled":      true,
+		"corp_id":      cfg.CorpID,
+		"agent_id":     cfg.AgentID,
+		"redirect_uri": redirectURI,
+	})
+}
+
+// handleWeComOAuthCallback 企微扫码登录 OAuth 回调。
+// 企微回调此地址时携带 code 参数，后端用 code 换取 UserID，创建会话，重定向到首页。
+func (s *Server) handleWeComOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.WeCom.OutboundOnly {
+		writeErr(w, http.StatusNotFound, "wecom oauth disabled in outbound-only mode")
+		return
+	}
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		writeErr(w, http.StatusBadRequest, "missing code parameter")
+		return
+	}
+
+	// 用 code 换取 UserID
+	userID, err := s.wecomGW.GetUserInfoByCode(r.Context(), code)
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, "wecom oauth failed: "+err.Error())
+		return
+	}
+
+	// 用企微 UserID 作为管理员用户名创建会话
+	sess, err := s.sess.Create(r.Context(), userID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "create session failed")
+		return
+	}
+	s.setSessionCookie(w, sess.Token, sess.ExpiresAt)
+
+	// 重定向到管理后台首页
+	http.Redirect(w, r, "/", http.StatusFound)
 }

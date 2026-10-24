@@ -61,9 +61,12 @@ type GroupChat struct {
 	SelectedTechUserID string           `json:"selected_tech_userid"`
 	SelectedTechName   string           `json:"selected_tech_name"`
 	SelectedTechTag    string           `json:"selected_tech_tag"`
-	Steps              []StepState      `json:"steps"`
-	CreatedAt          time.Time        `json:"created_at"`
-	UpdatedAt          time.Time        `json:"updated_at"`
+	SeqNo              int              `json:"seq_no"` // 该技术负责的第几个群（含本群）
+	// CreateTime 企微侧建群时间（unix 秒）；0 表示未知，退回用 CreatedAt
+	CreateTime int64       `json:"create_time"`
+	Steps      []StepState `json:"steps"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
 }
 
 func NewPipelineSteps() []StepState {

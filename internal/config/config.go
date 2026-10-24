@@ -54,6 +54,7 @@ type WeComConfig struct {
 	CorpID         string `toml:"corp_id"`
 	CorpSecret     string `toml:"corp_secret"`
 	AgentID        int64  `toml:"agent_id"`
+	OutboundOnly   bool   `toml:"outbound_only"`
 	Token          string `toml:"token"`
 	EncodingAESKey string `toml:"encoding_aes_key"`
 	// CallbackPath 默认 /wecom/callback
@@ -63,11 +64,35 @@ type WeComConfig struct {
 	UseFakeGateway bool `toml:"use_fake_gateway"`
 	// GroupWebhook 客户群发消息用的群机器人 Webhook（外部客户群实用通道）
 	GroupWebhook string `toml:"group_webhook"`
+	// GroupSyncIntervalSeconds 客户群列表轮询间隔；0 表示关闭，最小 60 秒。
+	GroupSyncIntervalSeconds int `toml:"group_sync_interval_seconds"`
+	// OAuthRedirectURI 企微扫码登录回调地址（需与企微后台配置的可信域名一致）
+	OAuthRedirectURI string `toml:"oauth_redirect_uri"`
+	// PaymentSyncIntervalSeconds 对外收款流水同步间隔；0 表示关闭，最小 60 秒。
+	PaymentSyncIntervalSeconds int `toml:"payment_sync_interval_seconds"`
+	// AiBotToken / AiBotAESKey 智能机器人（API 模式 URL 回调）的加解密凭据。
+	// 在企微后台「智能机器人 → 编辑 → 使用 URL 回调」处填入同一组值。
+	AiBotToken  string `toml:"aibot_token"`
+	AiBotAESKey string `toml:"aibot_encoding_aes_key"`
+	// AiBotPath 机器人回调路径，默认 /wecom/aibot
+	AiBotPath string `toml:"aibot_path"`
+	// NotifyAllowUserIDs 建群通知白名单。非空时只给这些人发私聊（用于测试阶段）。
+	NotifyAllowUserIDs []string `toml:"notify_allow_userids"`
+	// NotifyAutoOnNewGroup 是否在发现新客户群时自动私聊通知技术。
+	// 默认 false（关闭）：只保留管理台「提醒技术」手动触发，避免打扰。
+	NotifyAutoOnNewGroup bool `toml:"notify_auto_on_new_group"`
+}
+
+// AiBotEnabled 智能机器人回调是否已配置。
+func (w WeComConfig) AiBotEnabled() bool {
+	return strings.TrimSpace(w.AiBotToken) != "" &&
+		strings.TrimSpace(w.AiBotAESKey) != ""
 }
 
 // Enabled 回调加解密所需三项是否齐全。
 func (w WeComConfig) CallbackEnabled() bool {
-	return strings.TrimSpace(w.CorpID) != "" &&
+	return !w.OutboundOnly &&
+		strings.TrimSpace(w.CorpID) != "" &&
 		strings.TrimSpace(w.Token) != "" &&
 		strings.TrimSpace(w.EncodingAESKey) != ""
 }
@@ -166,6 +191,14 @@ func (c *Config) Validate() error {
 	}
 	if len(c.Session.Secret) < 16 {
 		return fmt.Errorf("invalid config: session.secret must be at least 16 characters")
+	}
+	if c.WeCom.GroupSyncIntervalSeconds < 0 ||
+		(c.WeCom.GroupSyncIntervalSeconds > 0 && c.WeCom.GroupSyncIntervalSeconds < 60) {
+		return fmt.Errorf("invalid config: wecom.group_sync_interval_seconds must be 0 or at least 60")
+	}
+	if c.WeCom.PaymentSyncIntervalSeconds < 0 ||
+		(c.WeCom.PaymentSyncIntervalSeconds > 0 && c.WeCom.PaymentSyncIntervalSeconds < 60) {
+		return fmt.Errorf("invalid config: wecom.payment_sync_interval_seconds must be 0 or at least 60")
 	}
 	return nil
 }

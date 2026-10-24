@@ -48,14 +48,14 @@ func seedTechs(t *testing.T, svc *tech.Service) {
 	ctx := context.Background()
 	_, err := svc.Create(ctx, tech.CreateInput{
 		UserID: "tech_a", Name: "甲工", Stack: "Go", WorkTime: "10-19",
-		Intro: "后端A", NameTag: "🔧甲",
+		Intro: "后端A", NameTag: "🔧甲", Emoji: "💻", Duty: "技术支持",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = svc.Create(ctx, tech.CreateInput{
 		UserID: "tech_b", Name: "乙工", Stack: "Vue", WorkTime: "10-19",
-		Intro: "前端B", NameTag: "🔧乙",
+		Intro: "前端B", NameTag: "🔧乙", Emoji: "🎨", Duty: "设计",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +143,8 @@ func TestOnChatCreated_ExternalPipeline_TwoTechs(t *testing.T) {
 	if renames != 1 {
 		t.Fatalf("Rename count=%d", renames)
 	}
-	if renameTo != "07-21-🔧乙｜文档" {
+	// 新格式：✖️ + 技术图标 + 建群日期（如 ✖️🎨07-21）
+	if renameTo != "✖️🎨07-21" {
 		t.Fatalf("rename=%q", renameTo)
 	}
 	if !contains(introText, "乙工") || contains(introText, "甲工") {
@@ -288,4 +289,3 @@ func filterMethod(calls []wecom.Call, method string) []wecom.Call {
 	}
 	return out
 }
-

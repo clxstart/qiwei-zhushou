@@ -21,7 +21,7 @@ func NewGroupStore(db *DB) *GroupStore {
 func (s *GroupStore) GetByChatID(ctx context.Context, chatID string) (*delivery.GroupChat, error) {
 	row := s.db.SQL.QueryRowContext(ctx, `
 		SELECT chat_id, name, creator_userid, is_external, members_json,
-		       selected_tech_userid, selected_tech_name, selected_tech_tag,
+		       selected_tech_userid, selected_tech_name, selected_tech_tag, seq_no, create_time,
 		       steps_json, created_at, updated_at
 		FROM group_chats WHERE chat_id = ?`, chatID)
 	var (
@@ -32,7 +32,7 @@ func (s *GroupStore) GetByChatID(ctx context.Context, chatID string) (*delivery.
 	)
 	err := row.Scan(
 		&g.ChatID, &g.Name, &g.CreatorUserID, &isExternal, &membersJSON,
-		&g.SelectedTechUserID, &g.SelectedTechName, &g.SelectedTechTag,
+		&g.SelectedTechUserID, &g.SelectedTechName, &g.SelectedTechTag, &g.SeqNo, &g.CreateTime,
 		&stepsJSON, &createdAt, &updatedAt,
 	)
 	if err != nil {
@@ -58,7 +58,7 @@ func (s *GroupStore) GetByChatID(ctx context.Context, chatID string) (*delivery.
 func (s *GroupStore) List(ctx context.Context) ([]delivery.GroupChat, error) {
 	rows, err := s.db.SQL.QueryContext(ctx, `
 		SELECT chat_id, name, creator_userid, is_external, members_json,
-		       selected_tech_userid, selected_tech_name, selected_tech_tag,
+		       selected_tech_userid, selected_tech_name, selected_tech_tag, seq_no, create_time,
 		       steps_json, created_at, updated_at
 		FROM group_chats ORDER BY updated_at DESC`)
 	if err != nil {
@@ -75,7 +75,7 @@ func (s *GroupStore) List(ctx context.Context) ([]delivery.GroupChat, error) {
 		)
 		if err := rows.Scan(
 			&g.ChatID, &g.Name, &g.CreatorUserID, &isExternal, &membersJSON,
-			&g.SelectedTechUserID, &g.SelectedTechName, &g.SelectedTechTag,
+			&g.SelectedTechUserID, &g.SelectedTechName, &g.SelectedTechTag, &g.SeqNo, &g.CreateTime,
 			&stepsJSON, &createdAt, &updatedAt,
 		); err != nil {
 			return nil, err
@@ -112,9 +112,9 @@ func (s *GroupStore) Save(ctx context.Context, g *delivery.GroupChat) error {
 	_, err = s.db.SQL.ExecContext(ctx, `
 		INSERT INTO group_chats (
 			chat_id, name, creator_userid, is_external, members_json,
-			selected_tech_userid, selected_tech_name, selected_tech_tag,
+			selected_tech_userid, selected_tech_name, selected_tech_tag, seq_no, create_time,
 			steps_json, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
 			name=VALUES(name),
 			creator_userid=VALUES(creator_userid),
@@ -123,10 +123,12 @@ func (s *GroupStore) Save(ctx context.Context, g *delivery.GroupChat) error {
 			selected_tech_userid=VALUES(selected_tech_userid),
 			selected_tech_name=VALUES(selected_tech_name),
 			selected_tech_tag=VALUES(selected_tech_tag),
+			seq_no=VALUES(seq_no),
+			create_time=VALUES(create_time),
 			steps_json=VALUES(steps_json),
 			updated_at=VALUES(updated_at)`,
 		g.ChatID, g.Name, g.CreatorUserID, isExternal, membersJSON,
-		g.SelectedTechUserID, g.SelectedTechName, g.SelectedTechTag,
+		g.SelectedTechUserID, g.SelectedTechName, g.SelectedTechTag, g.SeqNo, g.CreateTime,
 		stepsJSON, g.CreatedAt.Unix(), g.UpdatedAt.Unix(),
 	)
 	return err

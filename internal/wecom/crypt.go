@@ -134,10 +134,13 @@ func (c *Crypt) Encrypt(msg []byte) (string, error) {
 	return base64.StdEncoding.EncodeToString(padded), nil
 }
 
+// 企微官方 PKCS7 填充块大小为 32 字节（不是 AES 的 16）。
+const wecomPadBlock = 32
+
 func pkcs7Pad(data []byte) []byte {
-	pad := aes.BlockSize - len(data)%aes.BlockSize
+	pad := wecomPadBlock - len(data)%wecomPadBlock
 	if pad == 0 {
-		pad = aes.BlockSize
+		pad = wecomPadBlock
 	}
 	out := make([]byte, len(data)+pad)
 	copy(out, data)
@@ -152,7 +155,7 @@ func pkcs7Unpad(data []byte) ([]byte, error) {
 		return nil, ErrInvalidCiphertext
 	}
 	pad := int(data[len(data)-1])
-	if pad == 0 || pad > aes.BlockSize || pad > len(data) {
+	if pad == 0 || pad > wecomPadBlock || pad > len(data) {
 		return nil, ErrInvalidCiphertext
 	}
 	for i := 0; i < pad; i++ {

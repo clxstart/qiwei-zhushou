@@ -81,6 +81,43 @@ func TestValidate_ShortSecret(t *testing.T) {
 	}
 }
 
+func TestValidate_GroupSyncInterval(t *testing.T) {
+	base := func(interval int) *Config {
+		return &Config{
+			MySQL:   MySQLConfig{DSN: "dsn"},
+			Admin:   AdminConfig{Username: "a", Password: "b"},
+			Session: SessionConfig{Secret: "0123456789abcdef"},
+			WeCom:   WeComConfig{GroupSyncIntervalSeconds: interval},
+		}
+	}
+	for _, interval := range []int{0, 60, 120} {
+		if err := base(interval).Validate(); err != nil {
+			t.Fatalf("interval %d should be valid: %v", interval, err)
+		}
+	}
+	for _, interval := range []int{-1, 1, 59} {
+		if err := base(interval).Validate(); err == nil {
+			t.Fatalf("interval %d should be rejected", interval)
+		}
+	}
+}
+
+func TestCallbackEnabled_OutboundOnlyDisablesCallback(t *testing.T) {
+	cfg := WeComConfig{
+		CorpID:         "ww-test",
+		Token:          "token",
+		EncodingAESKey: "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+		OutboundOnly:   true,
+	}
+	if cfg.CallbackEnabled() {
+		t.Fatal("outbound-only mode must disable callbacks")
+	}
+	cfg.OutboundOnly = false
+	if !cfg.CallbackEnabled() {
+		t.Fatal("callbacks should be enabled when credentials are complete")
+	}
+}
+
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(sub) == 0 ||
 		(func() bool {

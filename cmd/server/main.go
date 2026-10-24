@@ -40,6 +40,7 @@ func main() {
 			log.Fatalf("listen: %v", err)
 		}
 	}()
+	container.Start()
 
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)

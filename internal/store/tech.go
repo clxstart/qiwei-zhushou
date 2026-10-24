@@ -26,9 +26,9 @@ func (s *TechStore) Create(ctx context.Context, p *tech.Person) error {
 	}
 	_, err := s.db.SQL.ExecContext(ctx, `
 		INSERT INTO tech_persons (
-			id, userid, name, stack, work_time, intro, name_tag, enabled, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.ID, p.UserID, p.Name, p.Stack, p.WorkTime, p.Intro, p.NameTag,
+			id, userid, name, stack, work_time, intro, name_tag, emoji, duty, enabled, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.UserID, p.Name, p.Stack, p.WorkTime, p.Intro, p.NameTag, p.Emoji, p.Duty,
 		enabled, p.CreatedAt.Unix(), p.UpdatedAt.Unix(),
 	)
 	if err != nil {
@@ -39,21 +39,21 @@ func (s *TechStore) Create(ctx context.Context, p *tech.Person) error {
 
 func (s *TechStore) Get(ctx context.Context, id string) (*tech.Person, error) {
 	row := s.db.SQL.QueryRowContext(ctx, `
-		SELECT id, userid, name, stack, work_time, intro, name_tag, enabled, created_at, updated_at
+		SELECT id, userid, name, stack, work_time, intro, name_tag, emoji, duty, enabled, created_at, updated_at
 		FROM tech_persons WHERE id = ?`, id)
 	return scanPerson(row)
 }
 
 func (s *TechStore) GetByUserID(ctx context.Context, userid string) (*tech.Person, error) {
 	row := s.db.SQL.QueryRowContext(ctx, `
-		SELECT id, userid, name, stack, work_time, intro, name_tag, enabled, created_at, updated_at
+		SELECT id, userid, name, stack, work_time, intro, name_tag, emoji, duty, enabled, created_at, updated_at
 		FROM tech_persons WHERE userid = ?`, userid)
 	return scanPerson(row)
 }
 
 func (s *TechStore) List(ctx context.Context) ([]tech.Person, error) {
 	rows, err := s.db.SQL.QueryContext(ctx, `
-		SELECT id, userid, name, stack, work_time, intro, name_tag, enabled, created_at, updated_at
+		SELECT id, userid, name, stack, work_time, intro, name_tag, emoji, duty, enabled, created_at, updated_at
 		FROM tech_persons ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, err
@@ -77,9 +77,9 @@ func (s *TechStore) Update(ctx context.Context, p *tech.Person) error {
 	}
 	res, err := s.db.SQL.ExecContext(ctx, `
 		UPDATE tech_persons SET
-			userid=?, name=?, stack=?, work_time=?, intro=?, name_tag=?, enabled=?, updated_at=?
+			userid=?, name=?, stack=?, work_time=?, intro=?, name_tag=?, emoji=?, duty=?, enabled=?, updated_at=?
 		WHERE id=?`,
-		p.UserID, p.Name, p.Stack, p.WorkTime, p.Intro, p.NameTag, enabled, p.UpdatedAt.Unix(), p.ID,
+		p.UserID, p.Name, p.Stack, p.WorkTime, p.Intro, p.NameTag, p.Emoji, p.Duty, enabled, p.UpdatedAt.Unix(), p.ID,
 	)
 	if err != nil {
 		return mapTechMySQLErr(err)
@@ -115,7 +115,7 @@ func scanPerson(row scannable) (*tech.Person, error) {
 		updatedAt int64
 	)
 	err := row.Scan(
-		&p.ID, &p.UserID, &p.Name, &p.Stack, &p.WorkTime, &p.Intro, &p.NameTag,
+		&p.ID, &p.UserID, &p.Name, &p.Stack, &p.WorkTime, &p.Intro, &p.NameTag, &p.Emoji, &p.Duty,
 		&enabled, &createdAt, &updatedAt,
 	)
 	if err != nil {

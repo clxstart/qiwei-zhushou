@@ -31,9 +31,9 @@ var (
 // Ledger 一群一账。
 type Ledger struct {
 	ChatID        string    `json:"chat_id"`
-	Deposit       int64     `json:"deposit"`        // 定金（元，整数）
-	Total         int64     `json:"total"`          // 总价
-	Tail          int64     `json:"tail"`           // 尾款 = total - deposit
+	Deposit       int64     `json:"deposit"` // 定金（元，整数）
+	Total         int64     `json:"total"`   // 总价
+	Tail          int64     `json:"tail"`    // 尾款 = total - deposit
 	CodeSentCount int       `json:"code_sent_count"`
 	Status        string    `json:"status"`
 	UpdatedAt     time.Time `json:"updated_at"`

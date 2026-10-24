@@ -3,12 +3,13 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/clxstart/qiwei-zhushou/internal/auth"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 )
 
 // DB 包装 sql.DB，提供迁移与会话存储。
@@ -46,8 +47,34 @@ func (d *DB) Ping(ctx context.Context) error {
 }
 
 // Migrate 执行基础建表（幂等），至少支撑会话与后续扩展。
+// 兼容 MySQL 5.7：ALTER 加列重复时报 1060，视为已迁移成功。
 func (d *DB) Migrate(ctx context.Context) error {
-	stmts := []string{
+	for _, stmt := range migrationStatements() {
+		if _, err := d.SQL.ExecContext(ctx, stmt); err != nil {
+			if isAlreadyAppliedDDL(err) {
+				continue
+			}
+			return fmt.Errorf("migrate: %w", err)
+		}
+	}
+	return nil
+}
+
+// isAlreadyAppliedDDL 判断幂等 DDL 的「已存在」类错误，可安全忽略。
+// 1060 Duplicate column name / 1061 Duplicate key name / 1091 Can't DROP
+func isAlreadyAppliedDDL(err error) bool {
+	var me *mysql.MySQLError
+	if errors.As(err, &me) {
+		switch me.Number {
+		case 1060, 1061, 1091:
+			return true
+		}
+	}
+	return false
+}
+
+func migrationStatements() []string {
+	return []string{
 		`CREATE TABLE IF NOT EXISTS schema_migrations (
 			id BIGINT PRIMARY KEY AUTO_INCREMENT,
 			name VARCHAR(128) NOT NULL UNIQUE,
@@ -68,12 +95,16 @@ func (d *DB) Migrate(ctx context.Context) error {
 			work_time VARCHAR(128) NOT NULL DEFAULT '',
 			intro VARCHAR(512) NOT NULL DEFAULT '',
 			name_tag VARCHAR(64) NOT NULL DEFAULT '',
+			emoji VARCHAR(16) NOT NULL DEFAULT '',
+			duty VARCHAR(64) NOT NULL DEFAULT '',
 			enabled TINYINT(1) NOT NULL DEFAULT 1,
 			created_at BIGINT NOT NULL,
 			updated_at BIGINT NOT NULL,
 			UNIQUE KEY uk_tech_persons_userid (userid),
 			INDEX idx_tech_persons_enabled (enabled)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`ALTER TABLE tech_persons ADD COLUMN emoji VARCHAR(16) NOT NULL DEFAULT ''`,
+		`ALTER TABLE tech_persons ADD COLUMN duty VARCHAR(64) NOT NULL DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS global_config (
 			id TINYINT PRIMARY KEY,
 			delivery_notice MEDIUMTEXT NOT NULL,
@@ -100,11 +131,15 @@ func (d *DB) Migrate(ctx context.Context) error {
 			selected_tech_userid VARCHAR(64) NOT NULL DEFAULT '',
 			selected_tech_name VARCHAR(64) NOT NULL DEFAULT '',
 			selected_tech_tag VARCHAR(64) NOT NULL DEFAULT '',
+			seq_no INT NOT NULL DEFAULT 0,
+			create_time BIGINT NOT NULL DEFAULT 0,
 			steps_json MEDIUMTEXT NOT NULL,
 			created_at BIGINT NOT NULL,
 			updated_at BIGINT NOT NULL,
 			INDEX idx_group_chats_updated (updated_at)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`ALTER TABLE group_chats ADD COLUMN seq_no INT NOT NULL DEFAULT 0`,
+		`ALTER TABLE group_chats ADD COLUMN create_time BIGINT NOT NULL DEFAULT 0`,
 		`CREATE TABLE IF NOT EXISTS group_ledgers (
 			chat_id VARCHAR(64) PRIMARY KEY,
 			deposit BIGINT NOT NULL DEFAULT 0,
@@ -127,13 +162,74 @@ func (d *DB) Migrate(ctx context.Context) error {
 			INDEX idx_op_logs_chat (chat_id, id),
 			INDEX idx_op_logs_action (action)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`CREATE TABLE IF NOT EXISTS wecom_group_sync_state (
+			id TINYINT PRIMARY KEY,
+			baseline_ready TINYINT(1) NOT NULL DEFAULT 0,
+			baseline_completed_at BIGINT NOT NULL DEFAULT 0,
+			updated_at BIGINT NOT NULL
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`CREATE TABLE IF NOT EXISTS wecom_group_observations (
+			chat_id VARCHAR(64) PRIMARY KEY,
+			status VARCHAR(16) NOT NULL,
+			last_error VARCHAR(1024) NOT NULL DEFAULT '',
+			first_seen_at BIGINT NOT NULL,
+			last_seen_at BIGINT NOT NULL,
+			processed_at BIGINT NOT NULL DEFAULT 0,
+			INDEX idx_wecom_group_observations_status (status, first_seen_at)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`CREATE TABLE IF NOT EXISTS wecom_group_webhooks (
+			chat_id VARCHAR(64) PRIMARY KEY,
+			webhook VARCHAR(512) NOT NULL,
+			updated_at BIGINT NOT NULL
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`CREATE TABLE IF NOT EXISTS payment_bills (
+			transaction_id VARCHAR(64) PRIMARY KEY,
+			chat_id VARCHAR(64) NOT NULL DEFAULT '',
+			bill_type INT NOT NULL DEFAULT 0,
+			trade_state INT NOT NULL DEFAULT 0,
+			pay_time BIGINT NOT NULL DEFAULT 0,
+			total_fee BIGINT NOT NULL DEFAULT 0,
+			total_refund_fee BIGINT NOT NULL DEFAULT 0,
+			payee_userid VARCHAR(64) NOT NULL DEFAULT '',
+			external_userid VARCHAR(128) NOT NULL DEFAULT '',
+			payment_type INT NOT NULL DEFAULT 0,
+			mch_id VARCHAR(64) NOT NULL DEFAULT '',
+			remark VARCHAR(512) NOT NULL DEFAULT '',
+			match_source VARCHAR(16) NOT NULL DEFAULT '',
+			created_at BIGINT NOT NULL,
+			INDEX idx_payment_bills_chat (chat_id),
+			INDEX idx_payment_bills_paytime (pay_time)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`CREATE TABLE IF NOT EXISTS broadcast_history (
+			id BIGINT PRIMARY KEY AUTO_INCREMENT,
+			msgid VARCHAR(64) NOT NULL DEFAULT '',
+			chat_id VARCHAR(64) NOT NULL,
+			sender VARCHAR(64) NOT NULL DEFAULT '',
+			created_at BIGINT NOT NULL,
+			INDEX idx_broadcast_history_chat (chat_id, created_at),
+			INDEX idx_broadcast_history_msg (msgid)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`CREATE TABLE IF NOT EXISTS keyword_replies (
+			id BIGINT PRIMARY KEY AUTO_INCREMENT,
+			keyword VARCHAR(128) NOT NULL,
+			reply TEXT NOT NULL,
+			match_type VARCHAR(16) NOT NULL DEFAULT 'exact',
+			enabled TINYINT(1) NOT NULL DEFAULT 1,
+			menu_no INT NOT NULL DEFAULT 0,
+			menu_label VARCHAR(128) NOT NULL DEFAULT '',
+			created_at BIGINT NOT NULL,
+			INDEX idx_keyword_replies_enabled (enabled, keyword)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+		`ALTER TABLE keyword_replies ADD COLUMN menu_no INT NOT NULL DEFAULT 0`,
+		`ALTER TABLE keyword_replies ADD COLUMN menu_label VARCHAR(128) NOT NULL DEFAULT ''`,
+		`CREATE TABLE IF NOT EXISTS group_notifications (
+			chat_id VARCHAR(64) NOT NULL,
+			userid VARCHAR(64) NOT NULL,
+			kind VARCHAR(16) NOT NULL,
+			created_at BIGINT NOT NULL,
+			PRIMARY KEY (chat_id, userid, kind)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 	}
-	for _, stmt := range stmts {
-		if _, err := d.SQL.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("migrate: %w", err)
-		}
-	}
-	return nil
 }
 
 // SessionStore MySQL 实现 auth.SessionStore。
